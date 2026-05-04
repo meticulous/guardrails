@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "yaml"
 require_relative "init/stack_detector"
 require_relative "init/config_writer"
+require_relative "init/media_query_scaffolder"
 
 module Guardrails
   class Init
@@ -22,10 +24,27 @@ module Guardrails
       result = StackDetector.new(@root).detect
       print_summary(result)
       ConfigWriter.new(@root, output: @output).write(result)
+      scaffold_media_queries
       result
     end
 
     private
+
+    def scaffold_media_queries
+      file = configured_colors_file
+      status, message = MediaQueryScaffolder.new(file, output: @output).scaffold
+      @output.puts "Media queries: #{message}"
+      status
+    end
+
+    def configured_colors_file
+      config_path = @root.join("guardrails.yml")
+      return nil unless config_path.exist?
+
+      config = YAML.safe_load_file(config_path) || {}
+      relative = config.dig("guardrails", "tokens", "colors_file")
+      relative ? @root.join(relative) : nil
+    end
 
     def print_summary(result)
       @output.puts "Guardrails — stack detection"
