@@ -1,0 +1,21 @@
+// Clean usage of tokens
+.button {
+  background: var(--primary-500);
+  color: var(--neutral-100);
+}
+
+.card {
+  border: 1px solid var(--neutral-900);
+}
+
+// Seeded drift — these match defined tokens (post-normalization) so the
+// tokens task should suggest the matching token reference for each.
+.legacy-button {
+  background: #0066ff;       // matches --primary-500
+  color: #f5f5f5;             // matches --neutral-100
+}
+
+// Drift with no matching token — should be reported as "no matching token"
+.experimental {
+  border: 1px solid #abcdef;
+}

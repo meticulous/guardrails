@@ -6,3 +6,7 @@ coverage/
 Gemfile.lock
 pkg/
 tmp/
+
+# Demo app generated artifacts
+examples/demo/app/assets/images/icons/sprite.svg
+examples/demo/doc/guardrails-suggestions-*.md

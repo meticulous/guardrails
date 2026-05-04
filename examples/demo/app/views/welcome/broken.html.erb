@@ -1,0 +1,33 @@
+<%# Seeded violations — every detector should produce at least one finding here. %>
+
+<%# 1. inline_style %>
+<h1 style="color: red; font-size: 24px">Drift demo</h1>
+
+<%# 2. raw_color: matches a defined token (#0066ff → --primary-500) %>
+<svg fill="#0066ff" viewBox="0 0 24 24"><path d="M12 12"/></svg>
+
+<%# 3. raw_color: near match (one channel off from --primary-500) %>
+<svg fill="#0066fe" viewBox="0 0 24 24"><path d="M12 12"/></svg>
+
+<%# 4. raw_color: no matching token %>
+<svg fill="#abcdef" viewBox="0 0 24 24"><path d="M12 12"/></svg>
+
+<%# 5. tailwind_arbitrary %>
+<div class="bg-[#fa3] p-[7px]">Arbitrary Tailwind values</div>
+
+<%# 6. inline_svg in a view (should be a sprite reference) %>
+<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+
+<%# 7. a11y: image without alt %>
+<img src="/decoration.png">
+
+<%# 8. a11y: empty button %>
+<button></button>
+
+<%# 9. a11y: link with no accessible name %>
+<a href="/profile"></a>
+
+<%# 10. stimulus_orphan: declared but no JS file exists %>
+<div data-controller="missing">
+  <span data-missing-target="value">x</span>
+</div>

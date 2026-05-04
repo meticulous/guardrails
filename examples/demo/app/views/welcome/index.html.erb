@@ -1,0 +1,19 @@
+<%# Clean baseline: tokens, sprite refs, accessible markup, healthy controllers %>
+<header data-controller="toggle">
+  <h1>Welcome to the Guardrails demo</h1>
+  <button type="button" data-action="click->toggle#toggle">
+    Toggle the menu
+  </button>
+</header>
+
+<section>
+  <p>This view is intentionally clean — no audits should flag it.</p>
+
+  <a href="/profile" aria-label="Open profile">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <use href="/sprite.svg#icon-check"/>
+    </svg>
+  </a>
+
+  <img src="/hero.jpg" alt="Hero illustration">
+</section>
