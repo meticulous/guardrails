@@ -88,6 +88,37 @@ RSpec.describe Guardrails::StimulusAudit do
       expect(run_audit.dead).to be_empty
     end
 
+    it "detects Ruby helper syntax: tag.div(data: { controller: 'foo' })" do
+      write_file "app/javascript/controllers/foo_controller.js"
+      write_file "app/views/x.html.erb", "<%= tag.div(data: { controller: 'foo' }) %>"
+
+      expect(run_audit.dead).to be_empty
+    end
+
+    it "detects Ruby helper syntax: link_to with data: { controller: }" do
+      write_file "app/javascript/controllers/nav_controller.js"
+      write_file "app/views/x.html.erb", '<%= link_to "x", "#", data: { controller: "nav" } %>'
+
+      expect(run_audit.dead).to be_empty
+    end
+
+    it "splits multiple controllers in Ruby helper syntax" do
+      write_file "app/javascript/controllers/a_controller.js"
+      write_file "app/javascript/controllers/b_controller.js"
+      write_file "app/views/x.html.erb", '<%= tag.div(data: { controller: "a b" }) %>'
+
+      result = run_audit
+      expect(result.dead).to be_empty
+      expect(result.orphaned).to be_empty
+    end
+
+    it "detects hash-rocket syntax: data: { :controller => 'foo' }" do
+      write_file "app/javascript/controllers/foo_controller.js"
+      write_file "app/views/x.html.erb", '<%= tag.div(data: { :controller => "foo" }) %>'
+
+      expect(run_audit.dead).to be_empty
+    end
+
     it "returns an object that responds to violations?" do
       result = run_audit
 

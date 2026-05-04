@@ -20,6 +20,12 @@ module Guardrails
 
     DATA_CONTROLLER_PATTERN = /data-controller\s*=\s*["']([^"']+)["']/
 
+    # Ruby helper syntax: `tag.div(data: { controller: "foo" })` or
+    # `link_to "x", url, data: { controller: "foo bar" }`. Allow `=>` rocket
+    # syntax too. Capture the string passed as the `controller:` value.
+    RUBY_DATA_CONTROLLER_PATTERN =
+      /data:?\s*(?:=>)?\s*\{[^}]*?controller:?\s*(?:=>)?\s*["']([^"']+)["']/m
+
     def initialize(root:, output: $stdout)
       @root = Pathname(root)
       @output = output
@@ -57,8 +63,8 @@ module Guardrails
 
     def extract_referenced(file)
       content = File.read(file, encoding: Encoding::UTF_8)
-      content.scan(DATA_CONTROLLER_PATTERN).flat_map do |captures|
-        captures[0].strip.split(/\s+/)
+      [DATA_CONTROLLER_PATTERN, RUBY_DATA_CONTROLLER_PATTERN].flat_map do |pattern|
+        content.scan(pattern).flat_map { |captures| captures[0].strip.split(/\s+/) }
       end
     end
 
