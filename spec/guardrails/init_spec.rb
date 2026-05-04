@@ -28,4 +28,18 @@ RSpec.describe Guardrails::Init do
 
     expect(root.join("guardrails.yml")).to exist
   end
+
+  it "skips media-query scaffolding when guardrails.yml already exists" do
+    root.join("guardrails.yml").write("# pre-existing")
+    root.join("app/assets/stylesheets/tokens").mkpath
+    token_file = root.join("app/assets/stylesheets/tokens/_colors.scss")
+    token_file.write("$primary: #0066ff;\n")
+
+    output = StringIO.new
+    described_class.new(root: root, output: output).run
+
+    expect(output.string).to include("refusing to overwrite")
+    expect(output.string).to include("Media queries: skipped")
+    expect(token_file.read(encoding: Encoding::UTF_8)).not_to include("prefers-color-scheme")
+  end
 end

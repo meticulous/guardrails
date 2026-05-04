@@ -23,8 +23,12 @@ module Guardrails
     def run
       result = StackDetector.new(@root).detect
       print_summary(result)
-      ConfigWriter.new(@root, output: @output).write(result)
-      scaffold_media_queries
+      written = ConfigWriter.new(@root, output: @output).write(result)
+      if written
+        scaffold_media_queries
+      else
+        @output.puts "Media queries: skipped (delete guardrails.yml and re-run init to scaffold)"
+      end
       result
     end
 
