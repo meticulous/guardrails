@@ -17,6 +17,9 @@ module Guardrails
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
     RGB_LITERAL_PATTERN = /\brgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)/
+    CLASS_ATTRIBUTE_DOUBLE = /\bclass\s*=\s*"([^"]*)"/
+    CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
+    ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
     def initialize(root:, output: $stdout)
       @root = Pathname(root)
@@ -43,8 +46,11 @@ module Guardrails
       original_lines = content.lines
       masked_no_erb = mask(content, ERB_BLOCK_PATTERN)
 
+      raw_color_input = mask_class_attributes(mask_inline_styles(masked_no_erb))
+
       detect_inline_styles(masked_no_erb, file, original_lines) +
-        detect_raw_color_literals(mask_inline_styles(masked_no_erb), file, original_lines)
+        detect_raw_color_literals(raw_color_input, file, original_lines) +
+        detect_tailwind_arbitrary(masked_no_erb, file, original_lines)
     end
 
     def detect_inline_styles(content, file, original_lines)
@@ -85,6 +91,31 @@ module Guardrails
       violations
     end
 
+    def detect_tailwind_arbitrary(content, file, original_lines)
+      violations = []
+      content.each_line.with_index do |line, idx|
+        [CLASS_ATTRIBUTE_DOUBLE, CLASS_ATTRIBUTE_SINGLE].each do |attr_pattern|
+          line.scan(attr_pattern) do
+            outer = Regexp.last_match
+            class_value = outer[1]
+            value_start = outer.begin(1)
+
+            class_value.scan(ARBITRARY_VALUE_PATTERN) do
+              offset = Regexp.last_match.begin(0)
+              violations << Violation.new(
+                type: :tailwind_arbitrary,
+                file: relative(file),
+                line: idx + 1,
+                column: value_start + offset + 1,
+                snippet: snippet(original_lines, idx)
+              )
+            end
+          end
+        end
+      end
+      violations
+    end
+
     def scan_lines(content, pattern)
       violations = []
       content.each_line.with_index do |line, idx|
@@ -108,6 +139,10 @@ module Guardrails
 
     def mask_inline_styles(content)
       mask(mask(content, INLINE_STYLE_DOUBLE), INLINE_STYLE_SINGLE)
+    end
+
+    def mask_class_attributes(content)
+      mask(mask(content, /\bclass\s*=\s*"[^"]*"/), /\bclass\s*=\s*'[^']*'/)
     end
 
     def mask_chars(string)

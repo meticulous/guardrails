@@ -153,6 +153,55 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "tailwind arbitrary value detection" do
+    it "flags bg-[#fa3] in a class attribute" do
+      write_view "app/views/x.html.erb", '<div class="bg-[#fa3] text-white">x</div>'
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.type).to eq(:tailwind_arbitrary)
+    end
+
+    it "flags multiple arbitrary values in one class string" do
+      write_view "app/views/x.html.erb", '<div class="bg-[#fa3] text-[14px] p-[7px]">x</div>'
+
+      types = run_audit.map(&:type)
+      expect(types).to eq([:tailwind_arbitrary, :tailwind_arbitrary, :tailwind_arbitrary])
+    end
+
+    it "flags arbitrary values in single-quoted class attributes" do
+      write_view "app/views/x.html.erb", "<div class='bg-[#fa3]'>x</div>"
+
+      expect(run_audit.length).to eq(1)
+    end
+
+    it "flags arbitrary variants like [&>div]:" do
+      write_view "app/views/x.html.erb", '<div class="[&>div]:bg-red-500">x</div>'
+
+      expect(run_audit.length).to eq(1)
+    end
+
+    it "does not flag bracketed text outside class attributes" do
+      write_view "app/views/x.html.erb", '<div data-foo="[bar]">x</div>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag arbitrary values inside ERB output blocks" do
+      write_view "app/views/x.html.erb", '<%= "class=\"bg-[#fa3]\"" %>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "reports the column where the arbitrary value starts" do
+      write_view "app/views/x.html.erb", '<div class="text-white bg-[#fa3]">x</div>'
+
+      v = run_audit.first
+      expect(v.type).to eq(:tailwind_arbitrary)
+      expect(v.column).to eq(27)
+    end
+  end
+
   describe "report output" do
     it "prints a clean summary when no violations are found" do
       output = StringIO.new
