@@ -92,6 +92,67 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "raw color detection" do
+    it "flags hex literals in attribute values" do
+      write_view "app/views/icons/show.html.erb", '<svg fill="#fa3"></svg>'
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.type).to eq(:raw_color)
+    end
+
+    it "flags 6-digit and 8-digit hex literals" do
+      write_view "app/views/a.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "app/views/b.html.erb", '<svg fill="#0066ff80"></svg>'
+
+      types = run_audit.map(&:type)
+      expect(types).to eq([:raw_color, :raw_color])
+    end
+
+    it "flags rgb() and rgba() literals in attribute values" do
+      write_view "app/views/x.html.erb", '<div data-color="rgb(255, 0, 0)"></div>'
+      write_view "app/views/y.html.erb", '<div data-color="rgba(0, 0, 0, 0.5)"></div>'
+
+      expect(run_audit.map(&:type)).to eq([:raw_color, :raw_color])
+    end
+
+    it "does not flag hex inside body text" do
+      write_view "app/views/post.html.erb", "<p>The brand color is #fa3 today</p>"
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag hex inside style= attributes (already covered by inline_style)" do
+      write_view "app/views/x.html.erb", '<p style="color: #fa3">x</p>'
+
+      types = run_audit.map(&:type)
+      expect(types).to eq([:inline_style])
+    end
+
+    it "does not flag hex inside ERB output blocks" do
+      write_view "app/views/x.html.erb", '<%= "color: #fa3" %>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "flags multiple hex literals on the same line" do
+      write_view "app/views/x.html.erb", '<svg fill="#fa3" stroke="#0066ff"></svg>'
+
+      expect(run_audit.length).to eq(2)
+    end
+
+    it "handles UTF-8 content (e.g. em-dashes) without raising" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <p>Brand color — pretty cool</p>
+        <svg fill="#fa3"></svg>
+      ERB
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.type).to eq(:raw_color)
+    end
+  end
+
   describe "report output" do
     it "prints a clean summary when no violations are found" do
       output = StringIO.new
