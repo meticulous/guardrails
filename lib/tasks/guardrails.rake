@@ -10,7 +10,10 @@ namespace :guardrails do
 
   desc "Audit views and components for UI drift"
   task :audit do
-    puts "guardrails:audit — not yet implemented"
+    require "guardrails/audit"
+    root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+    violations = Guardrails::Audit.new(root: root).run
+    exit 1 if violations.any?
   end
 
   desc "Generate SVG icon sprite and audit icon usage"
