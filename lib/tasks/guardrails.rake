@@ -13,6 +13,7 @@ namespace :guardrails do
     require "guardrails/audit"
     require "guardrails/stimulus_audit"
     require "guardrails/partial_similarity"
+    require "guardrails/view_component_audit"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
     apply = %w[1 true yes].include?(ENV["APPLY"]&.downcase)
@@ -22,7 +23,8 @@ namespace :guardrails do
     similarity_opts = { root: root }
     similarity_opts[:threshold] = ENV["SIMILARITY_THRESHOLD"].to_f if ENV["SIMILARITY_THRESHOLD"]
     similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
-    exit 1 if violations.any? || stimulus.violations? || similarity.any?
+    vc = Guardrails::ViewComponentAudit.new(root: root).run
+    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations?
   end
 
   desc "Generate SVG icon sprite and audit icon usage"
