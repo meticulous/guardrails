@@ -11,11 +11,13 @@ namespace :guardrails do
   desc "Audit views and components for UI drift (SUGGEST=1 writes markdown; FORMAT=json for machine-readable output)"
   task :audit do
     require "guardrails/audit"
+    require "guardrails/stimulus_audit"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
     violations = Guardrails::Audit.new(root: root, suggest: suggest, format: format).run
-    exit 1 if violations.any?
+    stimulus = Guardrails::StimulusAudit.new(root: root).run
+    exit 1 if violations.any? || stimulus.violations?
   end
 
   desc "Generate SVG icon sprite and audit icon usage"
