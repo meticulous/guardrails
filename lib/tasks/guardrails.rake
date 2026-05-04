@@ -3,7 +3,9 @@
 namespace :guardrails do
   desc "Initialize Guardrails configuration and analyze stylesheet stack"
   task :init do
-    puts "guardrails:init — not yet implemented"
+    require "guardrails/init"
+    root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+    Guardrails::Init.new(root: root).run
   end
 
   desc "Audit views and components for UI drift"
