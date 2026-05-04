@@ -21,14 +21,16 @@ module Guardrails
     CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
-    def initialize(root:, output: $stdout)
+    def initialize(root:, output: $stdout, suggest: false)
       @root = Pathname(root)
       @output = output
+      @suggest = suggest
     end
 
     def run
       violations = collect_files.flat_map { |file| scan_file(file) }
       print_report(violations)
+      write_suggestions(violations) if @suggest
       violations
     end
 
@@ -156,6 +158,11 @@ module Guardrails
 
     def snippet(lines, idx)
       lines[idx]&.chomp&.strip
+    end
+
+    def write_suggestions(violations)
+      require_relative "audit/markdown_writer"
+      MarkdownWriter.new(@root, output: @output).write(violations)
     end
 
     def print_report(violations)

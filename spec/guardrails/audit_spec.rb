@@ -202,6 +202,25 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "suggest mode" do
+    it "writes a suggestions markdown when suggest is true" do
+      write_view "app/views/x.html.erb", '<p style="color: red">x</p>'
+
+      described_class.new(root: root, output: StringIO.new, suggest: true).run
+
+      matching = Dir.glob(root.join("doc/guardrails-suggestions-*.md"))
+      expect(matching.length).to eq(1)
+    end
+
+    it "does not write a suggestions markdown when suggest is false" do
+      write_view "app/views/x.html.erb", '<p style="color: red">x</p>'
+
+      described_class.new(root: root, output: StringIO.new, suggest: false).run
+
+      expect(Dir.glob(root.join("doc/guardrails-suggestions-*.md"))).to be_empty
+    end
+  end
+
   describe "report output" do
     it "prints a clean summary when no violations are found" do
       output = StringIO.new
