@@ -11,9 +11,12 @@ module Guardrails
     DEFAULT_NGRAM_SIZE = 3
     MIN_TAGS = 5
 
+    # Scan ERB partials (underscore-prefixed in app/views and app/components)
+    # AND ViewComponent sidecar templates (*_component.html.erb in app/components).
     PARTIAL_PATTERNS = [
       "app/views/**/_*.html.erb",
-      "app/components/**/_*.html.erb"
+      "app/components/**/_*.html.erb",
+      "app/components/**/*_component.html.erb"
     ].freeze
 
     HTML_TAG_PATTERN = /<\/?\s*([a-zA-Z][\w-]*)\b[^>]*>/
@@ -90,7 +93,7 @@ module Guardrails
 
       @output.puts ""
       noun = findings.length == 1 ? "pair" : "pairs"
-      @output.puts "Guardrails partials: #{findings.length} similar #{noun} (>= #{@threshold} structural similarity)"
+      @output.puts "Guardrails templates: #{findings.length} similar #{noun} (>= #{@threshold} structural similarity)"
       findings.each do |f|
         @output.puts "  #{format('%.2f', f.score)}  #{f.file_a} ↔ #{f.file_b}  (#{f.tag_count_a} / #{f.tag_count_b} tags)"
       end

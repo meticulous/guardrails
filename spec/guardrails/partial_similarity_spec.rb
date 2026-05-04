@@ -165,6 +165,26 @@ RSpec.describe Guardrails::PartialSimilarity do
       expect(findings.length).to eq(1)
     end
 
+    it "scans ViewComponent sidecar templates (no underscore prefix)" do
+      structure = "<div><h1>X</h1><p>1</p><p>2</p><p>3</p></div>"
+      write_partial "app/components/user_card_component.html.erb", structure
+      write_partial "app/components/admin_card_component.html.erb", structure
+
+      findings = described_class.new(root: root, output: StringIO.new).compute_findings
+
+      expect(findings.length).to eq(1)
+    end
+
+    it "matches VC templates against ERB partials when structurally similar" do
+      structure = "<div><h1>X</h1><p>1</p><p>2</p><p>3</p></div>"
+      write_partial "app/views/users/_card.html.erb", structure
+      write_partial "app/components/admin_card_component.html.erb", structure
+
+      findings = described_class.new(root: root, output: StringIO.new).compute_findings
+
+      expect(findings.length).to eq(1)
+    end
+
     it "reports findings sorted by score descending" do
       identical = "<div><h1>x</h1><h2>y</h2><p>z</p><p>z</p><p>z</p></div>"
       similar = "<div><h1>x</h1><h2>y</h2><p>z</p><p>z</p><span>z</span></div>"
