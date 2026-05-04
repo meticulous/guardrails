@@ -5,15 +5,16 @@ require "fileutils"
 require "stringio"
 require "guardrails/audit"
 require "guardrails/audit/markdown_writer"
+require "guardrails/tokens"
 
 RSpec.describe Guardrails::Audit::MarkdownWriter do
   let(:root) { Pathname(Dir.mktmpdir) }
   let(:now) { Time.utc(2026, 5, 4, 16, 30, 0) }
   after { FileUtils.rm_rf(root) }
 
-  def violation(type:, file:, line: 1, column: 1, snippet: "x")
+  def violation(type:, file:, line: 1, column: 1, snippet: "x", value: nil)
     Guardrails::Audit::Violation.new(
-      type: type, file: file, line: line, column: column, snippet: snippet
+      type: type, file: file, line: line, column: column, snippet: snippet, value: value
     )
   end
 
@@ -84,6 +85,81 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
       output = StringIO.new
       described_class.new(root, output: output, now: now).write([])
       expect(output.string).to include("doc/guardrails-suggestions-20260504T163000Z.md")
+    end
+  end
+
+  describe "token-aware suggestions" do
+    def token(name:, value:, syntax: :scss_var, file: "tokens.scss", line: 1)
+      Guardrails::Tokens::Token.new(
+        name: name, value: value, syntax: syntax, file: file, line: line
+      )
+    end
+
+    it "suggests the matching token reference for raw_color when an exact match exists" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<svg fill="#0066ff"></svg>')
+      tokens = [token(name: "primary", value: "#0066ff", syntax: :scss_var)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `$primary`")
+      expect(content).to include("matches token `primary`")
+    end
+
+    it "suggests var(--name) for CSS custom property tokens" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<svg fill="#0066ff"></svg>')
+      tokens = [token(name: "primary-500", value: "#0066ff", syntax: :css_var)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `var(--primary-500)`")
+    end
+
+    it "matches normalized hex (case + short form)" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#fa3",
+                    snippet: '<svg fill="#fa3"></svg>')
+      tokens = [token(name: "secondary", value: "#FFAA33")]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("matches token `secondary`")
+    end
+
+    it "matches Tailwind arbitrary values against token values" do
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<div class="bg-[#0066ff]">x</div>')
+      tokens = [token(name: "primary", value: "#0066ff", syntax: :scss_var)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("matches token `primary`")
+    end
+
+    it "falls back to the stock suggestion when no token matches" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#abcdef",
+                    snippet: '<svg fill="#abcdef"></svg>')
+      tokens = [token(name: "primary", value: "#0066ff")]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use a CSS custom property or SCSS variable")
+      expect(content).not_to include("matches token")
+    end
+
+    it "uses stock suggestions when no tokens are provided" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<svg fill="#0066ff"></svg>')
+
+      described_class.new(root, output: StringIO.new, now: now).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use a CSS custom property or SCSS variable")
     end
   end
 end

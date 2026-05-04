@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "stringio"
 
 module Guardrails
   class Audit
-    Violation = Struct.new(:type, :file, :line, :column, :snippet, keyword_init: true)
+    Violation = Struct.new(:type, :file, :line, :column, :snippet, :value, keyword_init: true)
 
     SCAN_PATTERNS = [
       "app/views/**/*.html.erb",
@@ -57,19 +58,20 @@ module Guardrails
     end
 
     def detect_inline_styles(content, file, original_lines)
-      scan_lines(content, INLINE_STYLE_PATTERN) do |idx, column|
+      scan_lines(content, INLINE_STYLE_PATTERN) do |idx, column, _line, match_text|
         Violation.new(
           type: :inline_style,
           file: relative(file),
           line: idx + 1,
           column: column,
-          snippet: snippet(original_lines, idx)
+          snippet: snippet(original_lines, idx),
+          value: match_text
         )
       end
     end
 
     def detect_raw_color_literals(content, file, original_lines)
-      violations = scan_lines(content, HEX_LITERAL_PATTERN) do |idx, column, line|
+      violations = scan_lines(content, HEX_LITERAL_PATTERN) do |idx, column, line, match_text|
         next unless inside_quoted_attribute?(line, column - 1)
 
         Violation.new(
@@ -77,10 +79,11 @@ module Guardrails
           file: relative(file),
           line: idx + 1,
           column: column,
-          snippet: snippet(original_lines, idx)
+          snippet: snippet(original_lines, idx),
+          value: match_text
         )
       end
-      violations += scan_lines(content, RGB_LITERAL_PATTERN) do |idx, column, line|
+      violations += scan_lines(content, RGB_LITERAL_PATTERN) do |idx, column, line, match_text|
         next unless inside_quoted_attribute?(line, column - 1)
 
         Violation.new(
@@ -88,7 +91,8 @@ module Guardrails
           file: relative(file),
           line: idx + 1,
           column: column,
-          snippet: snippet(original_lines, idx)
+          snippet: snippet(original_lines, idx),
+          value: match_text
         )
       end
       violations
@@ -105,12 +109,15 @@ module Guardrails
 
             class_value.scan(ARBITRARY_VALUE_PATTERN) do
               offset = Regexp.last_match.begin(0)
+              bracket_match = Regexp.last_match[0]
+              inner_value = bracket_match[1..-2] # strip [ and ]
               violations << Violation.new(
                 type: :tailwind_arbitrary,
                 file: relative(file),
                 line: idx + 1,
                 column: value_start + offset + 1,
-                snippet: snippet(original_lines, idx)
+                snippet: snippet(original_lines, idx),
+                value: inner_value
               )
             end
           end
@@ -123,8 +130,9 @@ module Guardrails
       violations = []
       content.each_line.with_index do |line, idx|
         line.scan(pattern) do
-          column = Regexp.last_match.begin(0) + 1
-          violation = yield(idx, column, line)
+          m = Regexp.last_match
+          column = m.begin(0) + 1
+          violation = yield(idx, column, line, m[0])
           violations << violation if violation
         end
       end
@@ -163,7 +171,14 @@ module Guardrails
 
     def write_suggestions(violations)
       require_relative "audit/markdown_writer"
-      MarkdownWriter.new(@root, output: @output).write(violations)
+      MarkdownWriter.new(@root, output: @output, tokens: load_tokens).write(violations)
+    end
+
+    def load_tokens
+      require_relative "tokens"
+      Tokens.new(root: @root, output: StringIO.new).parse_tokens
+    rescue StandardError
+      []
     end
 
     def print_report(violations)

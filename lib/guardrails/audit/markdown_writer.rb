@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require_relative "../hex_normalizer"
 
 module Guardrails
   class Audit
@@ -22,10 +23,11 @@ module Guardrails
         }
       }.freeze
 
-      def initialize(root, output: $stdout, now: Time.now)
+      def initialize(root, output: $stdout, now: Time.now, tokens: [])
         @root = Pathname(root)
         @output = output
         @now = now
+        @token_lookup = tokens.to_h { |t| [HexNormalizer.normalize(t.value), t] }
       end
 
       def write(violations)
@@ -89,9 +91,30 @@ module Guardrails
         violations.each do |v|
           lines << "- [ ] **Line #{v.line}, col #{v.column}:** `#{v.snippet}`"
           lines << "  - **Rule:** #{suggestion[:rule]}"
-          lines << "  - **Suggested replacement:** #{suggestion[:replacement]}" unless suggestion[:replacement].empty?
+
+          matched = match_token(v)
+          if matched
+            lines << "  - **Suggested replacement:** Use `#{format_token_reference(matched)}` (matches token `#{matched.name}` defined in `#{matched.file}:#{matched.line}`)."
+          elsif !suggestion[:replacement].empty?
+            lines << "  - **Suggested replacement:** #{suggestion[:replacement]}"
+          end
         end
         lines.join("\n") + "\n"
+      end
+
+      def match_token(violation)
+        return nil if violation.value.nil?
+        return nil if @token_lookup.empty?
+
+        @token_lookup[HexNormalizer.normalize(violation.value)]
+      end
+
+      def format_token_reference(token)
+        case token.syntax
+        when :css_var then "var(--#{token.name})"
+        when :scss_var then "$#{token.name}"
+        else token.name
+        end
       end
     end
   end

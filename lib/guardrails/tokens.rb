@@ -2,6 +2,7 @@
 
 require "pathname"
 require "yaml"
+require_relative "hex_normalizer"
 
 module Guardrails
   class Tokens
@@ -42,7 +43,7 @@ module Guardrails
     end
 
     def detect_drift(tokens)
-      lookup = tokens.to_h { |t| [normalize_hex(t.value), t] }
+      lookup = tokens.to_h { |t| [HexNormalizer.normalize(t.value), t] }
       drift = []
 
       stylesheets.each do |file|
@@ -60,7 +61,7 @@ module Guardrails
               line: idx + 1,
               column: column,
               value: value,
-              matched_token: lookup[normalize_hex(value)]
+              matched_token: lookup[HexNormalizer.normalize(value)]
             )
           end
         end
@@ -110,24 +111,6 @@ module Guardrails
 
     def variable_definition_line?(line)
       line.match?(SCSS_VAR_PATTERN) || line.match?(CSS_VAR_PATTERN)
-    end
-
-    def normalize_hex(value)
-      v = value.downcase.strip
-      return v unless v.start_with?("#")
-
-      case v.length
-      when 4 # #fa3 -> #ffaa33
-        "#" + v[1..].chars.map { |c| c * 2 }.join
-      when 5 # #fa3a -> #ffaa33 (strip alpha)
-        ("#" + v[1..].chars.map { |c| c * 2 }.join)[0..6]
-      when 7 # #ffaa33
-        v
-      when 9 # #ffaa3380 -> #ffaa33 (strip alpha)
-        v[0..6]
-      else
-        v
-      end
     end
 
     def print_drift(drift)
