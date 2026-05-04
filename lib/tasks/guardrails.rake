@@ -20,7 +20,9 @@ namespace :guardrails do
 
   desc "Generate SVG icon sprite and audit icon usage"
   task :icons do
-    puts "guardrails:icons — not yet implemented"
+    require "guardrails/icons"
+    root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+    Guardrails::Icons.new(root: root).run
   end
 
   desc "Audit design tokens and report violations"
