@@ -2,6 +2,7 @@
 
 require "pathname"
 require_relative "init/stack_detector"
+require_relative "init/config_writer"
 
 module Guardrails
   class Init
@@ -20,6 +21,7 @@ module Guardrails
     def run
       result = StackDetector.new(@root).detect
       print_summary(result)
+      ConfigWriter.new(@root, output: @output).write(result)
       result
     end
 

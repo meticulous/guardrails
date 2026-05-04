@@ -22,4 +22,10 @@ RSpec.describe Guardrails::Init do
 
     expect(result.strategy).to eq(:none)
   end
+
+  it "writes guardrails.yml as part of the run" do
+    described_class.new(root: root, output: StringIO.new).run
+
+    expect(root.join("guardrails.yml")).to exist
+  end
 end
