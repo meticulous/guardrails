@@ -25,8 +25,10 @@ namespace :guardrails do
     Guardrails::Icons.new(root: root).run
   end
 
-  desc "Audit design tokens and report violations"
+  desc "Audit design tokens and report drift"
   task :tokens do
-    puts "guardrails:tokens — not yet implemented"
+    require "guardrails/tokens"
+    root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+    Guardrails::Tokens.new(root: root).run
   end
 end
