@@ -261,6 +261,39 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "configurable scan_paths and ignore" do
+    def configure(audit_config)
+      root.join("guardrails.yml").write({ "guardrails" => { "audit" => audit_config } }.to_yaml)
+    end
+
+    it "honors scan_paths from guardrails.yml" do
+      configure("scan_paths" => ["lib/templates"])
+      write_view "lib/templates/welcome.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "app/views/welcome.html.erb", '<svg fill="#0066ff"></svg>'
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.file).to eq("lib/templates/welcome.html.erb")
+    end
+
+    it "honors ignore from guardrails.yml" do
+      configure("ignore" => ["app/views/layouts"])
+      write_view "app/views/layouts/application.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "app/views/welcome.html.erb", '<svg fill="#0066ff"></svg>'
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.file).to eq("app/views/welcome.html.erb")
+    end
+
+    it "falls back to defaults when no audit config is set" do
+      write_view "app/views/x.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "app/components/y.html.erb", '<svg fill="#0066ff"></svg>'
+
+      expect(run_audit.length).to eq(2)
+    end
+  end
+
   describe "report output" do
     it "prints a clean summary when no violations are found" do
       output = StringIO.new

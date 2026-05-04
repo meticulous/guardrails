@@ -9,10 +9,8 @@ module Guardrails
   class Audit
     Violation = Struct.new(:type, :file, :line, :column, :snippet, :value, keyword_init: true)
 
-    SCAN_PATTERNS = [
-      "app/views/**/*.html.erb",
-      "app/components/**/*.html.erb"
-    ].freeze
+    DEFAULT_SCAN_PATHS = ["app/views", "app/components"].freeze
+    SCAN_PATTERNS = DEFAULT_SCAN_PATHS.map { |p| "#{p}/**/*.html.erb" }.freeze
 
     INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
@@ -44,6 +42,7 @@ module Guardrails
       @suggest = suggest
       @format = format
       @apply = apply
+      @config = load_audit_config
     end
 
     def run
@@ -56,11 +55,38 @@ module Guardrails
 
     private
 
+    def load_audit_config
+      config_path = @root.join("guardrails.yml")
+      return {} unless config_path.exist?
+
+      (YAML.safe_load_file(config_path) || {}).dig("guardrails", "audit") || {}
+    rescue StandardError
+      {}
+    end
+
+    def scan_paths
+      paths = @config["scan_paths"] || DEFAULT_SCAN_PATHS
+      Array(paths)
+    end
+
+    def ignore_paths
+      Array(@config["ignore"] || [])
+    end
+
     def collect_files
-      SCAN_PATTERNS
+      patterns = scan_paths.map { |p| File.join(p, "**/*.html.erb") }
+      patterns
         .flat_map { |pattern| Dir.glob(@root.join(pattern)) }
         .map { |path| Pathname(path) }
         .uniq
+        .reject { |path| ignored?(path) }
+    end
+
+    def ignored?(path)
+      relative = path.relative_path_from(@root).to_s
+      ignore_paths.any? do |ignore|
+        relative == ignore || relative.start_with?("#{ignore}/")
+      end
     end
 
     def scan_file(file)
