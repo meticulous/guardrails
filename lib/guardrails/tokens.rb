@@ -12,6 +12,8 @@ module Guardrails
     CSS_VAR_PATTERN = /--([a-z][\w-]*):\s*([^;]+);/i
     SCSS_VAR_PATTERN = /\$([a-z][\w-]*):\s*([^;]+);/i
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
+    BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//
+    LINE_COMMENT_PATTERN = /\/\/[^\n]*/
     STYLESHEET_PATTERNS = [
       "app/assets/stylesheets/**/*.{css,scss}",
       "app/assets/tailwind/**/*.css"
@@ -49,7 +51,8 @@ module Guardrails
       stylesheets.each do |file|
         next if file == colors_file
 
-        content = File.read(file, encoding: Encoding::UTF_8)
+        raw_content = File.read(file, encoding: Encoding::UTF_8)
+        content = strip_comments(raw_content)
         content.each_line.with_index do |line, idx|
           next if variable_definition_line?(line)
 
@@ -111,6 +114,19 @@ module Guardrails
 
     def variable_definition_line?(line)
       line.match?(SCSS_VAR_PATTERN) || line.match?(CSS_VAR_PATTERN)
+    end
+
+    # Replace CSS/SCSS comments with whitespace, preserving line/column
+    # positions so reported drift coordinates remain accurate.
+    def strip_comments(content)
+      content
+        .gsub(BLOCK_COMMENT_PATTERN) { |m| mask_chars(m) }
+        .gsub(LINE_COMMENT_PATTERN) { |m| " " * m.length }
+    end
+
+    def mask_chars(string)
+      newline_count = string.count("\n")
+      "\n" * newline_count + " " * (string.length - newline_count)
     end
 
     def print_drift(drift)

@@ -169,6 +169,39 @@ RSpec.describe Guardrails::Tokens do
 
       expect(detect).to be_empty
     end
+
+    it "ignores hex literals inside line comments" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_button.scss", <<~SCSS
+        // Brand color is #0066ff but we use the token below
+        .btn { color: $primary; }
+      SCSS
+
+      expect(detect).to be_empty
+    end
+
+    it "ignores hex literals inside block comments" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_button.scss", <<~SCSS
+        /* Old palette: #0066ff and #ffaa33 */
+        .btn { color: $primary; }
+      SCSS
+
+      expect(detect).to be_empty
+    end
+
+    it "still flags drift on the same line as a comment when the hex is in code" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_button.scss", <<~SCSS
+        .btn { color: #ffaa33; /* wrong, should be primary */ }
+      SCSS
+
+      expect(detect.length).to eq(1)
+      expect(detect.first.value).to eq("#ffaa33")
+    end
   end
 
   describe "#run" do
