@@ -105,6 +105,72 @@ RSpec.describe Guardrails::Tokens do
     end
   end
 
+  describe "#detect_drift" do
+    def detect
+      audit = described_class.new(root: root, output: StringIO.new)
+      audit.detect_drift(audit.parse_tokens)
+    end
+
+    it "returns no drift when stylesheets only use defined token references" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_button.scss", ".btn { color: $primary; }"
+
+      expect(detect).to be_empty
+    end
+
+    it "flags hex literals in non-token stylesheets" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_button.scss", ".btn { color: #0066ff; }"
+
+      drift = detect
+      expect(drift.length).to eq(1)
+      expect(drift.first.value).to eq("#0066ff")
+    end
+
+    it "matches drift values to defined tokens" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_button.scss", ".btn { color: #0066ff; }"
+
+      expect(detect.first.matched_token.name).to eq("primary")
+    end
+
+    it "matches normalized hex (case + short form expansion)" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$brand: #FFAA33;"
+      write_file "app/assets/stylesheets/_x.scss", ".x { color: #fa3; }"
+
+      drift = detect
+      expect(drift.first.matched_token.name).to eq("brand")
+    end
+
+    it "reports unmatched drift with no matched_token" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_x.scss", ".x { color: #abcdef; }"
+
+      drift = detect
+      expect(drift.first.matched_token).to be_nil
+    end
+
+    it "skips the configured colors_file itself" do
+      configure(colors_file: "app/assets/stylesheets/_tokens.scss")
+      write_file "app/assets/stylesheets/_tokens.scss", "$primary: #0066ff;"
+
+      expect(detect).to be_empty
+    end
+
+    it "skips lines that look like token definitions" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/_more-tokens.scss", "$another: #abcdef;"
+
+      expect(detect).to be_empty
+    end
+  end
+
   describe "#run" do
     it "reports a friendly message when no colors_file is configured" do
       output = StringIO.new

@@ -6,9 +6,15 @@ require "yaml"
 module Guardrails
   class Tokens
     Token = Struct.new(:name, :value, :syntax, :file, :line, keyword_init: true)
+    Drift = Struct.new(:file, :line, :column, :value, :matched_token, keyword_init: true)
 
     CSS_VAR_PATTERN = /--([a-z][\w-]*):\s*([^;]+);/i
     SCSS_VAR_PATTERN = /\$([a-z][\w-]*):\s*([^;]+);/i
+    HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
+    STYLESHEET_PATTERNS = [
+      "app/assets/stylesheets/**/*.{css,scss}",
+      "app/assets/tailwind/**/*.css"
+    ].freeze
 
     def initialize(root:, output: $stdout)
       @root = Pathname(root)
@@ -18,8 +24,10 @@ module Guardrails
 
     def run
       tokens = parse_tokens
+      drift = detect_drift(tokens)
       print_summary(tokens)
-      tokens
+      print_drift(drift)
+      { tokens: tokens, drift: drift }
     end
 
     def parse_tokens
@@ -31,6 +39,33 @@ module Guardrails
       tokens.concat(scan(content, file, CSS_VAR_PATTERN, :css_var))
       tokens.concat(scan(content, file, SCSS_VAR_PATTERN, :scss_var))
       tokens
+    end
+
+    def detect_drift(tokens)
+      lookup = tokens.to_h { |t| [normalize_hex(t.value), t] }
+      drift = []
+
+      stylesheets.each do |file|
+        next if file == colors_file
+
+        content = File.read(file, encoding: Encoding::UTF_8)
+        content.each_line.with_index do |line, idx|
+          next if variable_definition_line?(line)
+
+          line.scan(HEX_LITERAL_PATTERN) do
+            value = Regexp.last_match[0]
+            column = Regexp.last_match.begin(0) + 1
+            drift << Drift.new(
+              file: file.relative_path_from(@root).to_s,
+              line: idx + 1,
+              column: column,
+              value: value,
+              matched_token: lookup[normalize_hex(value)]
+            )
+          end
+        end
+      end
+      drift
     end
 
     private
@@ -64,6 +99,52 @@ module Guardrails
         end
       end
       tokens
+    end
+
+    def stylesheets
+      STYLESHEET_PATTERNS
+        .flat_map { |pattern| Dir.glob(@root.join(pattern)) }
+        .map { |path| Pathname(path) }
+        .uniq
+    end
+
+    def variable_definition_line?(line)
+      line.match?(SCSS_VAR_PATTERN) || line.match?(CSS_VAR_PATTERN)
+    end
+
+    def normalize_hex(value)
+      v = value.downcase.strip
+      return v unless v.start_with?("#")
+
+      case v.length
+      when 4 # #fa3 -> #ffaa33
+        "#" + v[1..].chars.map { |c| c * 2 }.join
+      when 5 # #fa3a -> #ffaa33 (strip alpha)
+        ("#" + v[1..].chars.map { |c| c * 2 }.join)[0..6]
+      when 7 # #ffaa33
+        v
+      when 9 # #ffaa3380 -> #ffaa33 (strip alpha)
+        v[0..6]
+      else
+        v
+      end
+    end
+
+    def print_drift(drift)
+      return if drift.empty?
+
+      @output.puts ""
+      @output.puts "Guardrails tokens: #{drift.length} color literal#{'s' if drift.length != 1} found in stylesheets outside the token file"
+      drift.each do |d|
+        suffix = d.matched_token ? " — matches #{format_token_name(d.matched_token)}" : " — no matching token"
+        @output.puts "  #{d.file}:#{d.line}:#{d.column}  #{d.value}#{suffix}"
+      end
+    end
+
+    def format_token_name(token)
+      prefix = token.syntax == :css_var ? "var(--" : "$"
+      suffix = token.syntax == :css_var ? ")" : ""
+      "#{prefix}#{token.name}#{suffix}"
     end
 
     def print_summary(tokens)
