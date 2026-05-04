@@ -14,6 +14,7 @@ namespace :guardrails do
     require "guardrails/stimulus_audit"
     require "guardrails/partial_similarity"
     require "guardrails/view_component_audit"
+    require "guardrails/a11y_audit"
     require "stringio"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
@@ -34,6 +35,7 @@ namespace :guardrails do
       similarity_opts[:output] = sink
       similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
       vc = Guardrails::ViewComponentAudit.new(root: root, output: sink).run
+      a11y = Guardrails::A11yAudit.new(root: root, output: sink).run
 
       require "json"
       payload = {
@@ -43,7 +45,8 @@ namespace :guardrails do
           stimulus_dead: stimulus.dead.length,
           similar_partials: similarity.length,
           missing_previews: vc.missing_previews.length,
-          orphan_slots: vc.orphan_slots.length
+          orphan_slots: vc.orphan_slots.length,
+          a11y: a11y.length
         },
         violations: violations.map(&:to_h),
         stimulus: { orphaned: stimulus.orphaned, dead: stimulus.dead },
@@ -51,7 +54,8 @@ namespace :guardrails do
         view_components: {
           missing_previews: vc.missing_previews,
           orphan_slots: vc.orphan_slots.map(&:to_h)
-        }
+        },
+        a11y: a11y.map(&:to_h)
       }
       $stdout.puts JSON.pretty_generate(payload)
     else
@@ -61,9 +65,10 @@ namespace :guardrails do
       stimulus = Guardrails::StimulusAudit.new(root: root).run
       similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
       vc = Guardrails::ViewComponentAudit.new(root: root).run
+      a11y = Guardrails::A11yAudit.new(root: root).run
     end
 
-    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations?
+    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any?
   end
 
   desc "Generate SVG icon sprite and audit icon usage"
