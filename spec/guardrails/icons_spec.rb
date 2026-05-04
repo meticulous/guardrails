@@ -125,9 +125,57 @@ RSpec.describe Guardrails::Icons do
     it "returns the path to the written sprite" do
       write_svg "app/assets/images/icons/x.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
 
-      result = run_icons
+      generate_only = described_class.new(root: root, output: StringIO.new)
+      expect(generate_only.generate_sprite).to eq(sprite_path)
+    end
+  end
 
-      expect(result).to eq(sprite_path)
+  describe "#audit_inline_svgs" do
+    def write_view(relative, content)
+      full = root.join(relative)
+      full.dirname.mkpath
+      full.write(content)
+    end
+
+    it "flags an inline <svg>...</svg> in a view" do
+      write_view "app/views/x.html.erb", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+
+      violations = described_class.new(root: root, output: StringIO.new).audit_inline_svgs
+      expect(violations.length).to eq(1)
+      expect(violations.first.type).to eq(:inline_svg)
+      expect(violations.first.file).to eq("app/views/x.html.erb")
+    end
+
+    it "does not flag svg blocks that contain <use> (sprite references)" do
+      write_view "app/views/x.html.erb", '<svg viewBox="0 0 24 24"><use href="/sprite.svg#icon-check"/></svg>'
+
+      expect(described_class.new(root: root, output: StringIO.new).audit_inline_svgs).to be_empty
+    end
+
+    it "flags multi-line inline svgs and reports the opening line" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <h1>Title</h1>
+        <svg viewBox="0 0 24 24">
+          <path d="M0 0"/>
+        </svg>
+      ERB
+
+      violations = described_class.new(root: root, output: StringIO.new).audit_inline_svgs
+      expect(violations.length).to eq(1)
+      expect(violations.first.line).to eq(2)
+    end
+
+    it "scans both app/views and app/components" do
+      write_view "app/views/a.html.erb", '<svg><path/></svg>'
+      write_view "app/components/b.html.erb", '<svg><circle/></svg>'
+
+      expect(described_class.new(root: root, output: StringIO.new).audit_inline_svgs.length).to eq(2)
+    end
+
+    it "ignores svg blocks inside ERB output" do
+      write_view "app/views/x.html.erb", '<%= "<svg><path/></svg>" %>'
+
+      expect(described_class.new(root: root, output: StringIO.new).audit_inline_svgs).to be_empty
     end
   end
 end
