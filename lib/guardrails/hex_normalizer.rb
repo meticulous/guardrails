@@ -26,5 +26,22 @@ module Guardrails
         v
       end
     end
+
+    # Maximum per-channel (R / G / B) difference between two normalized hex
+    # colors, on a 0..255 scale. Returns nil if either value isn't a
+    # 7-char hex after normalization. Distance 0 = identical color.
+    def distance(a, b)
+      a_norm = normalize(a)
+      b_norm = normalize(b)
+      return nil unless a_norm.length == 7 && a_norm.start_with?("#")
+      return nil unless b_norm.length == 7 && b_norm.start_with?("#")
+
+      diffs = [
+        (a_norm[1..2].to_i(16) - b_norm[1..2].to_i(16)).abs,
+        (a_norm[3..4].to_i(16) - b_norm[3..4].to_i(16)).abs,
+        (a_norm[5..6].to_i(16) - b_norm[5..6].to_i(16)).abs
+      ]
+      diffs.max
+    end
   end
 end
