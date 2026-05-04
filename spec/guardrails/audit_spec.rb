@@ -221,6 +221,34 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "json output" do
+    it "emits valid JSON when format is :json" do
+      require "json"
+      write_view "app/views/x.html.erb", '<p style="color: red">x</p>'
+
+      output = StringIO.new
+      described_class.new(root: root, output: output, format: :json).run
+
+      parsed = JSON.parse(output.string)
+      expect(parsed["summary"]["total"]).to eq(1)
+      expect(parsed["summary"]["files"]).to eq(1)
+      expect(parsed["violations"].first["type"]).to eq("inline_style")
+      expect(parsed["violations"].first["file"]).to eq("app/views/x.html.erb")
+      expect(parsed["violations"].first["line"]).to eq(1)
+    end
+
+    it "emits valid JSON for an empty violation set" do
+      require "json"
+
+      output = StringIO.new
+      described_class.new(root: root, output: output, format: :json).run
+
+      parsed = JSON.parse(output.string)
+      expect(parsed["summary"]["total"]).to eq(0)
+      expect(parsed["violations"]).to eq([])
+    end
+  end
+
   describe "report output" do
     it "prints a clean summary when no violations are found" do
       output = StringIO.new

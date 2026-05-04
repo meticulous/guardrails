@@ -8,12 +8,13 @@ namespace :guardrails do
     Guardrails::Init.new(root: root).run
   end
 
-  desc "Audit views and components for UI drift (set SUGGEST=1 to write a suggestions markdown)"
+  desc "Audit views and components for UI drift (SUGGEST=1 writes markdown; FORMAT=json for machine-readable output)"
   task :audit do
     require "guardrails/audit"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
-    violations = Guardrails::Audit.new(root: root, suggest: suggest).run
+    format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
+    violations = Guardrails::Audit.new(root: root, suggest: suggest, format: format).run
     exit 1 if violations.any?
   end
 

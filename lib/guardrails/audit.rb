@@ -21,10 +21,11 @@ module Guardrails
     CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
-    def initialize(root:, output: $stdout, suggest: false)
+    def initialize(root:, output: $stdout, suggest: false, format: :text)
       @root = Pathname(root)
       @output = output
       @suggest = suggest
+      @format = format
     end
 
     def run
@@ -166,6 +167,15 @@ module Guardrails
     end
 
     def print_report(violations)
+      case @format
+      when :json
+        print_json(violations)
+      else
+        print_text(violations)
+      end
+    end
+
+    def print_text(violations)
       if violations.empty?
         @output.puts "Guardrails audit: no violations found."
         return
@@ -177,6 +187,18 @@ module Guardrails
         @output.puts "  [#{v.type}] #{v.file}:#{v.line}:#{v.column}"
         @output.puts "    #{v.snippet}"
       end
+    end
+
+    def print_json(violations)
+      require "json"
+      payload = {
+        summary: {
+          total: violations.length,
+          files: violations.map(&:file).uniq.length
+        },
+        violations: violations.map(&:to_h)
+      }
+      @output.puts JSON.pretty_generate(payload)
     end
   end
 end
