@@ -178,4 +178,46 @@ RSpec.describe Guardrails::Icons do
       expect(described_class.new(root: root, output: StringIO.new).audit_inline_svgs).to be_empty
     end
   end
+
+  describe "#report_dead_icons" do
+    def write_view(relative, content)
+      full = root.join(relative)
+      full.dirname.mkpath
+      full.write(content)
+    end
+
+    it "reports an icon as dead when no view references it" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_svg "app/assets/images/icons/x.svg", '<svg viewBox="0 0 24 24"><path d="M1 1"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="/sprite.svg#icon-check"/></svg>'
+
+      report = described_class.new(root: root, output: StringIO.new).report_dead_icons
+      expect(report[:dead]).to eq(["x"])
+    end
+
+    it "reports nothing when every icon is referenced" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-check"/></svg>'
+
+      report = described_class.new(root: root, output: StringIO.new).report_dead_icons
+      expect(report[:dead]).to be_empty
+      expect(report[:unknown]).to be_empty
+    end
+
+    it "flags references to icons that don't exist in source as unknown" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-typo"/></svg>'
+
+      report = described_class.new(root: root, output: StringIO.new).report_dead_icons
+      expect(report[:dead]).to eq(["check"])
+      expect(report[:unknown]).to eq(["typo"])
+    end
+
+    it "matches references inside ERB blocks too" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<%= sprite("#icon-check") %>'
+
+      expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
+    end
+  end
 end

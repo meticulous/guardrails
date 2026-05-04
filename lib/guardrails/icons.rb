@@ -21,6 +21,7 @@ module Guardrails
     SVG_BLOCK_PATTERN = /<svg\b[^>]*>[\s\S]*?<\/svg>/m
     VIEWBOX_ATTR = /\bviewBox\s*=\s*["']([^"']+)["']/i
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
+    ICON_REFERENCE_PATTERN = /#icon-([\w-]+)/
 
     def initialize(root:, output: $stdout, source: nil, sprite_output: nil)
       @root = Pathname(root)
@@ -35,11 +36,22 @@ module Guardrails
       generate_sprite
       violations = audit_inline_svgs
       report_inline_svgs(violations)
-      violations
+      dead_report = report_dead_icons
+      print_dead_report(dead_report)
+      { inline_svgs: violations, dead_icons: dead_report[:dead], unknown_refs: dead_report[:unknown] }
     end
 
     def audit_inline_svgs
       view_files.flat_map { |file| scan_view_for_inline_svgs(file) }
+    end
+
+    def report_dead_icons
+      icon_names = collect_icon_names
+      used_names = collect_used_icon_names
+      {
+        dead: (icon_names - used_names).sort,
+        unknown: (used_names - icon_names).sort
+      }
     end
 
     def generate_sprite
@@ -144,6 +156,31 @@ module Guardrails
       content.gsub(ERB_BLOCK_PATTERN) do |match|
         newline_count = match.count("\n")
         "\n" * newline_count + " " * (match.length - newline_count)
+      end
+    end
+
+    def collect_icon_names
+      collect_svgs.map { |path| path.basename(".svg").to_s }
+    end
+
+    def collect_used_icon_names
+      view_files.flat_map do |file|
+        content = File.read(file, encoding: Encoding::UTF_8)
+        content.scan(ICON_REFERENCE_PATTERN).flatten
+      end.uniq
+    end
+
+    def print_dead_report(report)
+      return if report[:dead].empty? && report[:unknown].empty?
+
+      @output.puts ""
+      unless report[:dead].empty?
+        @output.puts "Guardrails icons: #{report[:dead].length} unused icon#{'s' if report[:dead].length != 1} in source"
+        report[:dead].each { |name| @output.puts "  - #{name}" }
+      end
+      unless report[:unknown].empty?
+        @output.puts "Guardrails icons: #{report[:unknown].length} reference#{'s' if report[:unknown].length != 1} to icons not in source"
+        report[:unknown].each { |name| @output.puts "  - #icon-#{name}" }
       end
     end
 
