@@ -141,6 +141,18 @@ RSpec.describe Guardrails::Audit do
       expect(run_audit.length).to eq(2)
     end
 
+    it "does not flag hex-shaped URL fragments in href attributes" do
+      write_view "app/views/x.html.erb", '<a href="#section">Top</a><a href="#abc">Anchor</a>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag hex-shaped IDs in non-color data attributes" do
+      write_view "app/views/x.html.erb", '<div data-id="#abc123" data-fragment="#abcdef">x</div>'
+
+      expect(run_audit).to be_empty
+    end
+
     it "handles UTF-8 content (e.g. em-dashes) without raising" do
       write_view "app/views/x.html.erb", <<~ERB
         <p>Brand color — pretty cool</p>

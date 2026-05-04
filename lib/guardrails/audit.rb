@@ -15,14 +15,28 @@ module Guardrails
     ].freeze
 
     INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
-    INLINE_STYLE_DOUBLE = /\bstyle\s*=\s*"[^"]*"/
-    INLINE_STYLE_SINGLE = /\bstyle\s*=\s*'[^']*'/
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
     RGB_LITERAL_PATTERN = /\brgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)/
     CLASS_ATTRIBUTE_DOUBLE = /\bclass\s*=\s*"([^"]*)"/
     CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
+
+    # Attributes whose values legitimately carry color literals. Scoping
+    # raw_color detection to these keeps href="#section" or data-id="abc"
+    # from being misreported as color drift.
+    COLOR_ATTRIBUTE_NAMES = %w[
+      fill stroke color bgcolor background
+      flood-color lighting-color stop-color
+    ].freeze
+    COLOR_ATTRIBUTE_PATTERN = Regexp.union(
+      [
+        /\b(?:#{COLOR_ATTRIBUTE_NAMES.join('|')})\s*=\s*"([^"]*)"/i,
+        /\b(?:#{COLOR_ATTRIBUTE_NAMES.join('|')})\s*=\s*'([^']*)'/i,
+        /\bdata-[\w-]*colou?r[\w-]*\s*=\s*"([^"]*)"/i,
+        /\bdata-[\w-]*colou?r[\w-]*\s*=\s*'([^']*)'/i
+      ]
+    )
 
     def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false)
       @root = Pathname(root)
@@ -54,10 +68,8 @@ module Guardrails
       original_lines = content.lines
       masked_no_erb = mask(content, ERB_BLOCK_PATTERN)
 
-      raw_color_input = mask_class_attributes(mask_inline_styles(masked_no_erb))
-
       detect_inline_styles(masked_no_erb, file, original_lines) +
-        detect_raw_color_literals(raw_color_input, file, original_lines) +
+        detect_raw_color_literals(masked_no_erb, file, original_lines) +
         detect_tailwind_arbitrary(masked_no_erb, file, original_lines)
     end
 
@@ -75,29 +87,31 @@ module Guardrails
     end
 
     def detect_raw_color_literals(content, file, original_lines)
-      violations = scan_lines(content, HEX_LITERAL_PATTERN) do |idx, column, line, match_text|
-        next unless inside_quoted_attribute?(line, column - 1)
+      violations = []
+      content.each_line.with_index do |line, idx|
+        line.scan(COLOR_ATTRIBUTE_PATTERN) do
+          outer = Regexp.last_match
+          attr_value = outer.captures.compact.first
+          next if attr_value.nil? || attr_value.empty?
 
-        Violation.new(
-          type: :raw_color,
-          file: relative(file),
-          line: idx + 1,
-          column: column,
-          snippet: snippet(original_lines, idx),
-          value: match_text
-        )
-      end
-      violations += scan_lines(content, RGB_LITERAL_PATTERN) do |idx, column, line, match_text|
-        next unless inside_quoted_attribute?(line, column - 1)
+          # The captured group's start position may be in any of the union's
+          # alternatives — find whichever one matched.
+          value_start = (1..outer.captures.length).map { |i| outer.begin(i) }.compact.first
 
-        Violation.new(
-          type: :raw_color,
-          file: relative(file),
-          line: idx + 1,
-          column: column,
-          snippet: snippet(original_lines, idx),
-          value: match_text
-        )
+          [HEX_LITERAL_PATTERN, RGB_LITERAL_PATTERN].each do |pattern|
+            attr_value.scan(pattern) do
+              inner = Regexp.last_match
+              violations << Violation.new(
+                type: :raw_color,
+                file: relative(file),
+                line: idx + 1,
+                column: value_start + inner.begin(0) + 1,
+                snippet: snippet(original_lines, idx),
+                value: inner[0]
+              )
+            end
+          end
+        end
       end
       violations
     end
@@ -150,14 +164,6 @@ module Guardrails
 
     def mask(content, pattern)
       content.gsub(pattern) { |match| mask_chars(match) }
-    end
-
-    def mask_inline_styles(content)
-      mask(mask(content, INLINE_STYLE_DOUBLE), INLINE_STYLE_SINGLE)
-    end
-
-    def mask_class_attributes(content)
-      mask(mask(content, /\bclass\s*=\s*"[^"]*"/), /\bclass\s*=\s*'[^']*'/)
     end
 
     def mask_chars(string)
