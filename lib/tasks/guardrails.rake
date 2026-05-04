@@ -12,13 +12,17 @@ namespace :guardrails do
   task :audit do
     require "guardrails/audit"
     require "guardrails/stimulus_audit"
+    require "guardrails/partial_similarity"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
     apply = %w[1 true yes].include?(ENV["APPLY"]&.downcase)
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
     violations = Guardrails::Audit.new(root: root, suggest: suggest, apply: apply, format: format).run
     stimulus = Guardrails::StimulusAudit.new(root: root).run
-    exit 1 if violations.any? || stimulus.violations?
+    similarity_opts = { root: root }
+    similarity_opts[:threshold] = ENV["SIMILARITY_THRESHOLD"].to_f if ENV["SIMILARITY_THRESHOLD"]
+    similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
+    exit 1 if violations.any? || stimulus.violations? || similarity.any?
   end
 
   desc "Generate SVG icon sprite and audit icon usage"
