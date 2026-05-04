@@ -162,4 +162,52 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
       expect(content).to include("Use a CSS custom property or SCSS variable")
     end
   end
+
+  describe "near-match suggestions" do
+    def token(name:, value:, syntax: :css_var)
+      Guardrails::Tokens::Token.new(
+        name: name, value: value, syntax: syntax, file: "tokens.css", line: 1
+      )
+    end
+
+    it "shows near-match suggestions under the default 'notify' policy" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066fe",
+                    snippet: '<svg fill="#0066fe"></svg>')
+      tokens = [token(name: "primary", value: "#0066ff")]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("near match")
+      expect(content).to include("close to token `primary`")
+    end
+
+    it "hides near-match suggestions under 'leave' policy (falls back to stock)" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066fe",
+                    snippet: '<svg fill="#0066fe"></svg>')
+      tokens = [token(name: "primary", value: "#0066ff")]
+
+      described_class.new(
+        root, output: StringIO.new, now: now, tokens: tokens, near_match_policy: "leave"
+      ).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).not_to include("near match")
+      expect(content).not_to include("close to token")
+      expect(content).to include("Use a CSS custom property or SCSS variable")
+    end
+
+    it "shows exact matches regardless of policy" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<svg fill="#0066ff"></svg>')
+      tokens = [token(name: "primary", value: "#0066ff")]
+
+      described_class.new(
+        root, output: StringIO.new, now: now, tokens: tokens, near_match_policy: "leave"
+      ).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("matches token `primary`")
+    end
+  end
 end

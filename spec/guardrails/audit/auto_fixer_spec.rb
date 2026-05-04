@@ -149,4 +149,44 @@ RSpec.describe Guardrails::Audit::AutoFixer do
       expect(view_content("app/views/b.html.erb")).to include("var(--primary)")
     end
   end
+
+  describe "near-match policy" do
+    let(:near_violation) do
+      violation(type: :raw_color, file: "app/views/x.html.erb", line: 1, column: 12, value: "#0066fe")
+    end
+    let(:tokens) { [token(name: "primary", value: "#0066ff")] }
+
+    before do
+      write_view "app/views/x.html.erb", '<svg fill="#0066fe"></svg>'
+    end
+
+    it "does NOT auto-apply near matches under 'notify' policy" do
+      described_class.new(root, output: StringIO.new, tokens: tokens, near_match_policy: "notify").apply([near_violation])
+
+      expect(view_content("app/views/x.html.erb")).to include("#0066fe")
+    end
+
+    it "does NOT auto-apply near matches under 'leave' policy" do
+      described_class.new(root, output: StringIO.new, tokens: tokens, near_match_policy: "leave").apply([near_violation])
+
+      expect(view_content("app/views/x.html.erb")).to include("#0066fe")
+    end
+
+    it "auto-applies near matches under 'fix' policy" do
+      result = described_class.new(root, output: StringIO.new, tokens: tokens, near_match_policy: "fix").apply([near_violation])
+
+      expect(view_content("app/views/x.html.erb")).to include("var(--primary)")
+      expect(result.first.kind).to eq(:near)
+      expect(result.first.distance).to eq(1)
+    end
+
+    it "still auto-applies exact matches regardless of policy" do
+      write_view "app/views/x.html.erb", '<svg fill="#0066ff"></svg>'
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", line: 1, column: 12, value: "#0066ff")
+
+      described_class.new(root, output: StringIO.new, tokens: tokens, near_match_policy: "leave").apply([v])
+
+      expect(view_content("app/views/x.html.erb")).to include("var(--primary)")
+    end
+  end
 end

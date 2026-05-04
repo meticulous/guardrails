@@ -2,16 +2,18 @@
 
 require "pathname"
 require_relative "../hex_normalizer"
+require_relative "../token_matcher"
 
 module Guardrails
   class Audit
     class AutoFixer
-      Result = Struct.new(:violation, :token, :replacement, keyword_init: true)
+      Result = Struct.new(:violation, :token, :kind, :distance, :replacement, keyword_init: true)
 
-      def initialize(root, output: $stdout, tokens: [])
+      def initialize(root, output: $stdout, tokens: [], near_match_policy: "notify")
         @root = Pathname(root)
         @output = output
-        @lookup = tokens.to_h { |t| [HexNormalizer.normalize(t.value), t] }
+        @matcher = TokenMatcher.new(tokens)
+        @near_match_policy = near_match_policy
       end
 
       def apply(violations)
@@ -29,16 +31,19 @@ module Guardrails
       def applicable?(violation)
         return false unless violation.type == :raw_color
 
-        token = matched_token(violation)
-        !token.nil? && token.syntax == :css_var
+        match = applicable_match(violation)
+        !match.nil? && match.token.syntax == :css_var
       end
 
       private
 
-      def matched_token(violation)
-        return nil if violation.value.nil?
+      def applicable_match(violation)
+        match = @matcher.match(violation.value)
+        return nil unless match
+        return match if match.kind == :exact
+        return match if match.kind == :near && @near_match_policy == "fix"
 
-        @lookup[HexNormalizer.normalize(violation.value)]
+        nil
       end
 
       def process_file(path, violations)
@@ -53,17 +58,23 @@ module Guardrails
           next unless lines[line_idx]
 
           line_violations.sort_by { |v| -v.column }.each do |v|
-            token = matched_token(v)
-            next unless token
+            match = applicable_match(v)
+            next unless match
 
             current_line = lines[line_idx]
             start_idx = v.column - 1
             value_length = v.value.length
             next unless current_line[start_idx, value_length] == v.value
 
-            replacement = "var(--#{token.name})"
+            replacement = "var(--#{match.token.name})"
             lines[line_idx] = current_line[0...start_idx] + replacement + current_line[(start_idx + value_length)..]
-            applied << Result.new(violation: v, token: token, replacement: replacement)
+            applied << Result.new(
+              violation: v,
+              token: match.token,
+              kind: match.kind,
+              distance: match.distance,
+              replacement: replacement
+            )
           end
         end
 
@@ -79,7 +90,8 @@ module Guardrails
         noun = applied.length == 1 ? "fix" : "fixes"
         @output.puts "Guardrails audit: applied #{applied.length} auto-#{noun} (raw_color → CSS custom property)"
         applied.each do |r|
-          @output.puts "  #{r.violation.file}:#{r.violation.line}  #{r.violation.value} → #{r.replacement}"
+          suffix = r.kind == :near ? " [NEAR MATCH, channel diff #{r.distance}]" : ""
+          @output.puts "  #{r.violation.file}:#{r.violation.line}  #{r.violation.value} → #{r.replacement}#{suffix}"
         end
       end
     end

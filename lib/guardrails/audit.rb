@@ -3,6 +3,7 @@
 require "pathname"
 require "set"
 require "stringio"
+require "yaml"
 
 module Guardrails
   class Audit
@@ -174,7 +175,12 @@ module Guardrails
 
     def apply_auto_fixes(violations)
       require_relative "audit/auto_fixer"
-      fixer = AutoFixer.new(@root, output: @output, tokens: view_safe_tokens)
+      fixer = AutoFixer.new(
+        @root,
+        output: @output,
+        tokens: view_safe_tokens,
+        near_match_policy: near_match_policy
+      )
       applied = fixer.apply(violations)
       fixed_keys = applied.map { |r| [r.violation.file, r.violation.line, r.violation.column] }.to_set
       violations.reject { |v| fixed_keys.include?([v.file, v.line, v.column]) }
@@ -182,7 +188,22 @@ module Guardrails
 
     def write_suggestions(violations)
       require_relative "audit/markdown_writer"
-      MarkdownWriter.new(@root, output: @output, tokens: view_safe_tokens).write(violations)
+      MarkdownWriter.new(
+        @root,
+        output: @output,
+        tokens: view_safe_tokens,
+        near_match_policy: near_match_policy
+      ).write(violations)
+    end
+
+    def near_match_policy
+      config_path = @root.join("guardrails.yml")
+      return "notify" unless config_path.exist?
+
+      config = YAML.safe_load_file(config_path) || {}
+      config.dig("guardrails", "tokens", "near_match_policy") || "notify"
+    rescue StandardError
+      "notify"
     end
 
     def view_safe_tokens

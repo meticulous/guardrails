@@ -2,6 +2,7 @@
 
 require "pathname"
 require_relative "../hex_normalizer"
+require_relative "../token_matcher"
 
 module Guardrails
   class Audit
@@ -23,11 +24,12 @@ module Guardrails
         }
       }.freeze
 
-      def initialize(root, output: $stdout, now: Time.now, tokens: [])
+      def initialize(root, output: $stdout, now: Time.now, tokens: [], near_match_policy: "notify")
         @root = Pathname(root)
         @output = output
         @now = now
-        @token_lookup = tokens.to_h { |t| [HexNormalizer.normalize(t.value), t] }
+        @matcher = TokenMatcher.new(tokens)
+        @near_match_policy = near_match_policy
       end
 
       def write(violations)
@@ -92,9 +94,9 @@ module Guardrails
           lines << "- [ ] **Line #{v.line}, col #{v.column}:** `#{v.snippet}`"
           lines << "  - **Rule:** #{suggestion[:rule]}"
 
-          matched = match_token(v)
-          if matched
-            lines << "  - **Suggested replacement:** Use `#{format_token_reference(matched)}` (matches token `#{matched.name}` defined in `#{matched.file}:#{matched.line}`)."
+          match = visible_match(v)
+          if match
+            lines << format_match_line(match)
           elsif !suggestion[:replacement].empty?
             lines << "  - **Suggested replacement:** #{suggestion[:replacement]}"
           end
@@ -102,11 +104,24 @@ module Guardrails
         lines.join("\n") + "\n"
       end
 
-      def match_token(violation)
-        return nil if violation.value.nil?
-        return nil if @token_lookup.empty?
+      def visible_match(violation)
+        match = @matcher.match(violation.value)
+        return nil unless match
+        return nil if match.kind == :near && @near_match_policy == "leave"
 
-        @token_lookup[HexNormalizer.normalize(violation.value)]
+        match
+      end
+
+      def format_match_line(match)
+        token = match.token
+        ref = format_token_reference(token)
+        defined_at = "#{token.file}:#{token.line}"
+        if match.kind == :exact
+          "  - **Suggested replacement:** Use `#{ref}` (matches token `#{token.name}` defined in `#{defined_at}`)."
+        else
+          "  - **Suggested replacement (near match, channel diff #{match.distance}):** Use `#{ref}` " \
+            "(close to token `#{token.name}` = `#{token.value}` in `#{defined_at}`)."
+        end
       end
 
       def format_token_reference(token)
