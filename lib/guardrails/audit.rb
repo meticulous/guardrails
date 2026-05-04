@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "set"
 require "stringio"
 
 module Guardrails
@@ -22,18 +23,20 @@ module Guardrails
     CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
-    def initialize(root:, output: $stdout, suggest: false, format: :text)
+    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false)
       @root = Pathname(root)
       @output = output
       @suggest = suggest
       @format = format
+      @apply = apply
     end
 
     def run
       violations = collect_files.flat_map { |file| scan_file(file) }
       print_report(violations)
-      write_suggestions(violations) if @suggest
-      violations
+      remaining = @apply ? apply_auto_fixes(violations) : violations
+      write_suggestions(remaining) if @suggest
+      remaining
     end
 
     private
@@ -169,9 +172,25 @@ module Guardrails
       lines[idx]&.chomp&.strip
     end
 
+    def apply_auto_fixes(violations)
+      require_relative "audit/auto_fixer"
+      fixer = AutoFixer.new(@root, output: @output, tokens: view_safe_tokens)
+      applied = fixer.apply(violations)
+      fixed_keys = applied.map { |r| [r.violation.file, r.violation.line, r.violation.column] }.to_set
+      violations.reject { |v| fixed_keys.include?([v.file, v.line, v.column]) }
+    end
+
     def write_suggestions(violations)
       require_relative "audit/markdown_writer"
-      MarkdownWriter.new(@root, output: @output, tokens: load_tokens).write(violations)
+      MarkdownWriter.new(@root, output: @output, tokens: view_safe_tokens).write(violations)
+    end
+
+    def view_safe_tokens
+      # Views (HTML/ERB) cannot reference SCSS variables — `$primary` only
+      # exists at SCSS compile time. CSS custom properties (`var(--primary)`)
+      # work in any HTML/CSS context, so those are the only tokens that map
+      # cleanly into a view violation's source.
+      load_tokens.select { |t| t.syntax == :css_var }
     end
 
     def load_tokens

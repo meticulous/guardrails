@@ -8,14 +8,15 @@ namespace :guardrails do
     Guardrails::Init.new(root: root).run
   end
 
-  desc "Audit views and components for UI drift (SUGGEST=1 writes markdown; FORMAT=json for machine-readable output)"
+  desc "Audit views and components for UI drift (SUGGEST=1, APPLY=1, FORMAT=json)"
   task :audit do
     require "guardrails/audit"
     require "guardrails/stimulus_audit"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
+    apply = %w[1 true yes].include?(ENV["APPLY"]&.downcase)
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
-    violations = Guardrails::Audit.new(root: root, suggest: suggest, format: format).run
+    violations = Guardrails::Audit.new(root: root, suggest: suggest, apply: apply, format: format).run
     stimulus = Guardrails::StimulusAudit.new(root: root).run
     exit 1 if violations.any? || stimulus.violations?
   end
