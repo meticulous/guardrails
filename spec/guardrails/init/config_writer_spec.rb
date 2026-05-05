@@ -134,5 +134,29 @@ RSpec.describe Guardrails::Init::ConfigWriter do
 
       expect(output.string).to include("FORCE=1")
     end
+
+    it "writes near_match_threshold with a default of 4" do
+      described_class.new(root, output: StringIO.new).write(detection_result(strategy: :scss_variables))
+
+      expect(written_config["guardrails"]["tokens"]["near_match_threshold"]).to eq(4)
+    end
+
+    it "honors a near_match_threshold override" do
+      described_class.new(root, output: StringIO.new).write(
+        detection_result(strategy: :scss_variables),
+        overrides: { near_match_threshold: 1 }
+      )
+
+      expect(written_config["guardrails"]["tokens"]["near_match_threshold"]).to eq(1)
+    end
+
+    it "appends a comment explaining the threshold scale" do
+      described_class.new(root, output: StringIO.new).write(detection_result(strategy: :scss_variables))
+
+      content = root.join("guardrails.yml").read(encoding: Encoding::UTF_8)
+      expect(content).to include("near_match_threshold scale")
+      expect(content).to match(/0\s*=.*exact match/)
+      expect(content).to match(/4\s*=.*default/)
+    end
   end
 end

@@ -57,8 +57,8 @@ module Guardrails
 
       findings = []
       findings.concat(scan_img(masked, path, lines))
-      findings.concat(scan_button(masked, path, lines))
-      findings.concat(scan_link(masked, path, lines))
+      findings.concat(scan_button(masked, path, lines, content))
+      findings.concat(scan_link(masked, path, lines, content))
       findings.concat(scan_input(masked, path, lines))
       findings
     end
@@ -75,27 +75,29 @@ module Guardrails
       results
     end
 
-    def scan_button(content, file, lines)
+    def scan_button(content, file, lines, original_content)
       results = []
       content.scan(BUTTON_PATTERN) do
         m = Regexp.last_match
         attrs = m[1]
         body = m[2]
-        next if button_has_accessible_name?(attrs, body)
+        original_body = original_content[m.begin(2)...m.end(2)]
+        next if button_has_accessible_name?(attrs, body, original_body)
 
         results << finding(:button_name, m, file, lines)
       end
       results
     end
 
-    def scan_link(content, file, lines)
+    def scan_link(content, file, lines, original_content)
       results = []
       content.scan(LINK_PATTERN) do
         m = Regexp.last_match
         attrs = m[1]
         body = m[2]
+        original_body = original_content[m.begin(2)...m.end(2)]
         next unless attribute_present?(attrs, "href")
-        next if link_has_accessible_name?(attrs, body)
+        next if link_has_accessible_name?(attrs, body, original_body)
 
         results << finding(:link_name, m, file, lines)
       end
@@ -128,17 +130,28 @@ module Guardrails
       m ? m[1] : nil
     end
 
-    def button_has_accessible_name?(attrs, body)
+    def button_has_accessible_name?(attrs, body, original_body)
       return true if attribute_present?(attrs, "aria-label") || attribute_present?(attrs, "aria-labelledby")
+      # If the body wraps ERB output, defer to the helper_recommended
+      # detector — that case isn't an a11y bug, it's a Rails-idiom hint.
+      return true if has_erb_output?(original_body)
 
       visible_text(body).length.positive?
     end
 
-    def link_has_accessible_name?(attrs, body)
+    def link_has_accessible_name?(attrs, body, original_body)
       return true if attribute_present?(attrs, "aria-label") || attribute_present?(attrs, "aria-labelledby")
       return true if attribute_present?(attrs, "title")
+      return true if has_erb_output?(original_body)
 
       visible_text(body).length.positive?
+    end
+
+    # Matches only ERB *output* tags (`<%= %>`). Control flow (`<% if %>`,
+    # `<% end %>`) and comments (`<%# %>`) don't contribute renderable
+    # content and shouldn't suppress the a11y rule.
+    def has_erb_output?(body)
+      body.match?(/<%=[\s\S]*?%>/)
     end
 
     def visible_text(body)

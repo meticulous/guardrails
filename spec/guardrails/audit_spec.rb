@@ -261,6 +261,114 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "helper_recommended detection" do
+    it "flags <button> with ERB content inside" do
+      write_view "app/views/x.html.erb", "<button><%= label %></button>"
+
+      v = run_audit
+      expect(v.length).to eq(1)
+      expect(v.first.type).to eq(:helper_recommended)
+      expect(v.first.value).to eq("button")
+    end
+
+    it "flags <a> with ERB content inside" do
+      write_view "app/views/x.html.erb", '<a href="/x"><%= label %></a>'
+
+      v = run_audit
+      expect(v.length).to eq(1)
+      expect(v.first.type).to eq(:helper_recommended)
+      expect(v.first.value).to eq("a")
+    end
+
+    it "does not flag elements without ERB content" do
+      write_view "app/views/x.html.erb", "<button>Save</button><a href=\"/x\">Home</a>"
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag elements where ERB is inside attributes only" do
+      write_view "app/views/x.html.erb", '<a href="<%= path %>">Click</a>'
+
+      # The body is "Click" (no ERB), so no helper recommendation
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag elements whose body contains only ERB control flow" do
+      write_view "app/views/x.html.erb", "<button><% if cond %>Save<% end %></button>"
+
+      # The static text "Save" is an accessible name; control flow alone
+      # shouldn't trigger helper_recommended.
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag elements whose body contains only an ERB comment" do
+      write_view "app/views/x.html.erb", "<button><%# TODO %>Save</button>"
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag <a> without an href attribute (named anchors / JS hooks)" do
+      write_view "app/views/x.html.erb", '<a name="top"><%= label %></a>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "still flags <a href> with ERB output" do
+      write_view "app/views/x.html.erb", '<a href="/x"><%= label %></a>'
+
+      expect(run_audit.map(&:type)).to eq([:helper_recommended])
+    end
+
+    it "captures the line of the opening tag for multi-line elements" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <h1>Title</h1>
+        <button class="primary">
+          <%= label %>
+        </button>
+      ERB
+
+      v = run_audit
+      expect(v.length).to eq(1)
+      expect(v.first.line).to eq(2)
+    end
+  end
+
+  describe "configurable near_match_threshold" do
+    def configure_tokens(near_match_threshold:)
+      root.join("guardrails.yml").write({
+        "guardrails" => {
+          "tokens" => {
+            "colors_file" => "tokens.css",
+            "near_match_threshold" => near_match_threshold
+          }
+        }
+      }.to_yaml)
+      root.join("tokens.css").write(":root { --primary: #0066ff; }\n")
+    end
+
+    it "respects a custom near_match_threshold from guardrails.yml in suggest mode" do
+      configure_tokens(near_match_threshold: 0) # exact-only — disable near matches
+      write_view "app/views/x.html.erb", '<svg fill="#0066fe"></svg>' # 1 channel off
+
+      described_class.new(root: root, output: StringIO.new, suggest: true).run
+
+      md = Dir.glob(root.join("doc/guardrails-suggestions-*.md")).first
+      content = File.read(md, encoding: Encoding::UTF_8)
+      expect(content).not_to include("near match")
+    end
+
+    it "still emits near-match suggestions at the default threshold (4)" do
+      configure_tokens(near_match_threshold: 4)
+      write_view "app/views/x.html.erb", '<svg fill="#0066fe"></svg>'
+
+      described_class.new(root: root, output: StringIO.new, suggest: true).run
+
+      md = Dir.glob(root.join("doc/guardrails-suggestions-*.md")).first
+      content = File.read(md, encoding: Encoding::UTF_8)
+      expect(content).to include("near match")
+    end
+  end
+
   describe "configurable scan_paths and ignore" do
     def configure(audit_config)
       root.join("guardrails.yml").write({ "guardrails" => { "audit" => audit_config } }.to_yaml)

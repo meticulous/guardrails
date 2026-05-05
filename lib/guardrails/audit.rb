@@ -20,6 +20,19 @@ module Guardrails
     CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
+    # Elements where wrapping ERB output in literal HTML obscures static
+    # analysis (the body looks empty after ERB masking). Mapped to the
+    # Rails helper that handles the same case more cleanly.
+    HELPER_RECOMMENDED_TAGS = {
+      "button" => "tag.button(label, ...) or button_to(label, path) for forms",
+      "a" => "link_to(label, path, ...)"
+    }.freeze
+    # Match only ERB *output* tags (`<%= %>`), not control flow (`<% if %>`)
+    # or comments (`<%# %>`). The helper-recommendation rule is about
+    # rendering dynamic text inside a literal element, not about any ERB
+    # presence in the body.
+    ERB_OUTPUT_PATTERN = /<%=[\s\S]*?%>/
+
     # Attributes whose values legitimately carry color literals. Scoping
     # raw_color detection to these keeps href="#section" or data-id="abc"
     # from being misreported as color drift.
@@ -96,7 +109,8 @@ module Guardrails
 
       detect_inline_styles(masked_no_erb, file, original_lines) +
         detect_raw_color_literals(masked_no_erb, file, original_lines) +
-        detect_tailwind_arbitrary(masked_no_erb, file, original_lines)
+        detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
+        detect_helper_recommended(content, file, original_lines)
     end
 
     def detect_inline_styles(content, file, original_lines)
@@ -140,6 +154,36 @@ module Guardrails
         end
       end
       violations
+    end
+
+    def detect_helper_recommended(content, file, original_lines)
+      results = []
+      HELPER_RECOMMENDED_TAGS.each_key do |tag|
+        pattern = /<#{tag}\b([^>]*)>([\s\S]*?)<\/#{tag}>/m
+        content.scan(pattern) do
+          m = Regexp.last_match
+          attrs = m[1]
+          body = m[2]
+          next unless body.match?(ERB_OUTPUT_PATTERN)
+          # Suggesting link_to for an <a> without href would be wrong —
+          # named anchors and JS-only hooks aren't navigation.
+          next if tag == "a" && !attrs.match?(/\bhref\b/i)
+
+          offset = m.begin(0)
+          line_num = m.pre_match.count("\n") + 1
+          col_base = m.pre_match.rindex("\n")
+          column = col_base ? offset - col_base : offset + 1
+          results << Violation.new(
+            type: :helper_recommended,
+            file: relative(file),
+            line: line_num,
+            column: column,
+            snippet: snippet(original_lines, line_num - 1),
+            value: tag
+          )
+        end
+      end
+      results
     end
 
     def detect_tailwind_arbitrary(content, file, original_lines)
@@ -210,8 +254,9 @@ module Guardrails
       fixer = AutoFixer.new(
         @root,
         output: @output,
-        tokens: view_safe_tokens,
-        near_match_policy: near_match_policy
+        tokens: load_tokens,
+        near_match_policy: near_match_policy,
+        near_match_threshold: near_match_threshold
       )
       applied = fixer.apply(violations)
       fixed_keys = applied.map { |r| [r.violation.file, r.violation.line, r.violation.column] }.to_set
@@ -223,29 +268,36 @@ module Guardrails
       MarkdownWriter.new(
         @root,
         output: @output,
-        tokens: view_safe_tokens,
-        near_match_policy: near_match_policy
+        tokens: load_tokens,
+        near_match_policy: near_match_policy,
+        near_match_threshold: near_match_threshold
       ).write(violations)
     end
 
     def near_match_policy
+      tokens_config["near_match_policy"] || "notify"
+    end
+
+    def near_match_threshold
+      raw = tokens_config["near_match_threshold"]
+      raw.is_a?(Numeric) ? raw : 4
+    end
+
+    def tokens_config
       config_path = @root.join("guardrails.yml")
-      return "notify" unless config_path.exist?
+      return {} unless config_path.exist?
 
       config = YAML.safe_load_file(config_path) || {}
-      config.dig("guardrails", "tokens", "near_match_policy") || "notify"
+      config.dig("guardrails", "tokens") || {}
     rescue StandardError
-      "notify"
+      {}
     end
 
-    def view_safe_tokens
-      # Views (HTML/ERB) cannot reference SCSS variables — `$primary` only
-      # exists at SCSS compile time. CSS custom properties (`var(--primary)`)
-      # work in any HTML/CSS context, so those are the only tokens that map
-      # cleanly into a view violation's source.
-      load_tokens.select { |t| t.syntax == :css_var }
-    end
-
+    # Returns the full token list across colors_file, type_scale_file, and
+    # tailwind.config.js. MarkdownWriter and AutoFixer filter by token
+    # syntax against the current violation type — `$primary` doesn't
+    # compile in HTML attrs and `bg-primary` only makes sense for
+    # tailwind_arbitrary contexts, so the dispatch happens at use.
     def load_tokens
       require_relative "tokens"
       Tokens.new(root: @root, output: StringIO.new).parse_tokens

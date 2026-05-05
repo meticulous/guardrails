@@ -58,6 +58,13 @@ module Guardrails
           choices: NEAR_MATCH_POLICY_CHOICES,
           default: "notify"
         ),
+        near_match_threshold: parse_int(
+          prompter.ask(
+            "Near-match threshold (per-channel R/G/B, 0=exact only, 4=default, 10+=loose):",
+            default: "4"
+          ),
+          default: 4
+        ),
         scan_paths: csv(prompter.ask(
           "Audit scan paths (comma-separated):",
           default: DEFAULT_SCAN_PATHS.join(",")
@@ -67,6 +74,12 @@ module Guardrails
           default: DEFAULT_IGNORE.join(",")
         ))
       }
+    end
+
+    def parse_int(value, default:)
+      Integer(value)
+    rescue ArgumentError, TypeError
+      default
     end
 
     def csv(value)
