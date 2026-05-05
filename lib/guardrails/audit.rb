@@ -159,11 +159,15 @@ module Guardrails
     def detect_helper_recommended(content, file, original_lines)
       results = []
       HELPER_RECOMMENDED_TAGS.each_key do |tag|
-        pattern = /<#{tag}\b[^>]*>([\s\S]*?)<\/#{tag}>/m
+        pattern = /<#{tag}\b([^>]*)>([\s\S]*?)<\/#{tag}>/m
         content.scan(pattern) do
           m = Regexp.last_match
-          body = m[1]
+          attrs = m[1]
+          body = m[2]
           next unless body.match?(ERB_OUTPUT_PATTERN)
+          # Suggesting link_to for an <a> without href would be wrong —
+          # named anchors and JS-only hooks aren't navigation.
+          next if tag == "a" && !attrs.match?(/\bhref\b/i)
 
           offset = m.begin(0)
           line_num = m.pre_match.count("\n") + 1

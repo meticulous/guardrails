@@ -307,6 +307,18 @@ RSpec.describe Guardrails::Audit do
       expect(run_audit).to be_empty
     end
 
+    it "does not flag <a> without an href attribute (named anchors / JS hooks)" do
+      write_view "app/views/x.html.erb", '<a name="top"><%= label %></a>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "still flags <a href> with ERB output" do
+      write_view "app/views/x.html.erb", '<a href="/x"><%= label %></a>'
+
+      expect(run_audit.map(&:type)).to eq([:helper_recommended])
+    end
+
     it "captures the line of the opening tag for multi-line elements" do
       write_view "app/views/x.html.erb", <<~ERB
         <h1>Title</h1>
