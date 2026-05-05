@@ -1,7 +1,7 @@
 # Guardrails — Roadmap
 
-**Status:** V0 finished, V1 mostly shipped
-**Last updated:** 2026-05-04
+**Status:** V0 finished, V1 mostly shipped (all four V1 follow-up questions resolved)
+**Last updated:** 2026-05-05
 
 ## Context
 
@@ -37,7 +37,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. PR #1 ha
 |---|---|---|
 | `raw_color` exact-match rewrite to `var(--token)` | ✅ shipped | Right-to-left within line; verifies expected text at column before writing |
 | `raw_color` near-match rewrite | ✅ shipped | Gated on `near_match_policy: fix` in guardrails.yml |
-| `tailwind_arbitrary` auto-fix | ❌ deferred | Needs Tailwind utility-name mapping; parked |
+| `tailwind_arbitrary` auto-fix | ✅ shipped | Replaces `bg-[#hex]` with `bg-tokenname` when a `:tailwind` theme token matches by value. Variant prefixes (`lg:hover:`, `[&>div]:`) preserved |
 | `inline_style` auto-fix | ❌ deferred | Structural rewrite, not value swap |
 | `font-size` auto-fix | ❌ deferred | Same constraint as inline_style |
 
@@ -56,7 +56,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. PR #1 ha
 | Stack detection (CSS-vars / SCSS / raw-hex) | ✅ shipped | |
 | `guardrails.yml` writing with sensible defaults | ✅ shipped | |
 | `prefers-color-scheme` + `prefers-contrast` MQ scaffolding | ✅ shipped | Skipped if ConfigWriter refuses to overwrite |
-| Interactive prompts (TTY) | ✅ shipped | near_match_policy / scan_paths / ignore globs. CI-safe non-TTY fallback to defaults |
+| Interactive prompts (TTY) | ✅ shipped | near_match_policy / near_match_threshold / scan_paths / ignore globs. CI-safe non-TTY fallback to defaults. Skipped entirely when config exists and FORCE=1 isn't set |
 | Refuse-overwrite by default | ✅ shipped | |
 | `FORCE=1` to overwrite + re-scaffold MQs | ✅ shipped | |
 
@@ -99,8 +99,9 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. PR #1 ha
 | Component-shape similarity | ✅ shipped | n-gram Jaccard, default threshold 0.7. PartialSimilarity scans both `_*.html.erb` partials and `*_component.html.erb` VC templates |
 | Lookbook integration | 🟡 partial | `Guardrails::Lookbook::ComponentReport` data API + `doc/LOOKBOOK.md`. No Railtie auto-registration — user wires the panel manually |
 | ERB-partial structural similarity | ✅ shipped | Same PartialSimilarity engine |
-| A11y integration | 🟡 partial | Static checks shipped (image_alt, button_name, link_name, input_label). axe-core wrapper with `--deep` mode NOT shipped — would require Capybara + headless Chrome runtime deps. axe-core integration documented at `doc/A11Y.md` for users to wire alongside |
-| Targeted auto-fix | ✅ shipped | See V0 auto-fix table |
+| A11y integration | 🟡 partial | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name now skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. axe-core wrapper with `--deep` mode NOT shipped — would require Capybara + headless Chrome runtime deps. axe-core integration documented at `doc/A11Y.md` for users to wire alongside |
+| `helper_recommended` detector | ✅ shipped | Flags `<button>` / `<a>` wrapping ERB output and suggests `tag.button` / `button_to` / `link_to`. Pairs with the a11y skip for the same case |
+| Targeted auto-fix | ✅ shipped | See V0 auto-fix table; tailwind_arbitrary now also auto-fixes when a `:tailwind` theme token matches |
 | Sample app in `examples/` | 🟡 partial | Fake-Rails-app directory tree (no Gemfile, no bootable server). Serves as integration-test surface and talk material; doesn't `rails server` |
 
 ---
@@ -132,9 +133,11 @@ Untouched.
 | Near-match handling | Always *suggest* by default. Per-project policy in `guardrails.yml` (`fix` / `leave` / `notify`). |
 | `--strict` flag | **Dropped from V0.** No distinction beyond default exit-1-on-violations until severity levels exist. |
 | Standalone font-size detector | **Folded into inline_style + tailwind_arbitrary.** Type-scale awareness lives in suggest mode. |
-| Near-match threshold | **Max per-channel R/G/B = 4 units.** Configurable via `TokenMatcher#near_match_threshold`; not yet exposed in `guardrails.yml`. |
-| Init rerunnability | **Refuses overwrite by default; `FORCE=1` overrides.** |
+| Near-match threshold | **Max per-channel R/G/B = 4 units (default).** Configurable per-project via `tokens.near_match_threshold` in `guardrails.yml`; ConfigWriter emits a footer comment explaining the scale (0/1/4/10/20+). |
+| Init rerunnability | **Refuses overwrite by default; `FORCE=1` overrides.** Prompts are skipped entirely when overwrite is refused (no questions whose answers won't apply). |
 | MQ scaffold conflicts | **Skip if any matching `@media` block already exists.** Don't augment partial blocks. |
+| ERB-aware a11y | **Resolved via `helper_recommended` detector.** `<button>` / `<a>` wrapping ERB output trip the helper-recommendation rule (suggest `tag.button` / `link_to` etc.); the corresponding a11y rule (button_name / link_name) skips that case so users get one actionable suggestion, not two overlapping flags. |
+| Tailwind utility-name auto-fix | **Shipped.** APPLY=1 rewrites `bg-[#hex]` to `bg-tokenname` against `:tailwind` theme tokens. Variant prefixes (`lg:hover:`, `[&>div]:`) preserved. Suggestion text falls back to `bg-[var(--name)]` when only a `:css_var` token matches (still arbitrary, but parameterized). |
 
 ---
 
@@ -152,8 +155,4 @@ If a bootable Rails server is needed for the talk demo, that's a separate scaffo
 
 ## Open Questions
 
-1. **ERB-aware a11y.** `<button><%= label %></button>` is flagged by static `button_name` because the button body looks empty after ERB masking. Real fix needs to either (a) trust ERB output as content, or (b) require a defensive `aria-label="<%= label %>"`. Currently flagged with no smart handling.
-
-2. **Tailwind utility-name mapping for arbitrary-value auto-fix.** `bg-[#0066ff]` → `bg-primary` requires knowing which Tailwind utility name corresponds to which token. The Tailwind v3 parser captures token names; mapping back to utility class names is a separate transform.
-
-3. **Near-match threshold in `guardrails.yml`.** Currently hard-coded to 4 channel-units inside `TokenMatcher::NEAR_MATCH_THRESHOLD`. Should it be a per-project knob in `guardrails.yml` for users with stricter or looser tolerance?
+None currently. All four V1 follow-up questions have been resolved (see Decisions Captured below). Add new ones here as they emerge during V2 work.
