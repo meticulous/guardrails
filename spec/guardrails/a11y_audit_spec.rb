@@ -90,6 +90,18 @@ RSpec.describe Guardrails::A11yAudit do
       expect(findings.length).to eq(1)
       expect(findings.first.line).to eq(2)
     end
+
+    it "still flags a button whose body is only ERB control flow with no static text" do
+      write_view "app/views/x.html.erb", "<button><% if cond %><% end %></button>"
+
+      expect(run_audit.map(&:rule)).to include(:button_name)
+    end
+
+    it "still flags a button whose body is only an ERB comment" do
+      write_view "app/views/x.html.erb", "<button><%# TODO add label %></button>"
+
+      expect(run_audit.map(&:rule)).to include(:button_name)
+    end
   end
 
   describe "link_name" do

@@ -27,7 +27,11 @@ module Guardrails
       "button" => "tag.button(label, ...) or button_to(label, path) for forms",
       "a" => "link_to(label, path, ...)"
     }.freeze
-    ERB_OUTPUT_PATTERN = /<%=?[\s\S]*?%>/
+    # Match only ERB *output* tags (`<%= %>`), not control flow (`<% if %>`)
+    # or comments (`<%# %>`). The helper-recommendation rule is about
+    # rendering dynamic text inside a literal element, not about any ERB
+    # presence in the body.
+    ERB_OUTPUT_PATTERN = /<%=[\s\S]*?%>/
 
     # Attributes whose values legitimately carry color literals. Scoping
     # raw_color detection to these keeps href="#section" or data-id="abc"

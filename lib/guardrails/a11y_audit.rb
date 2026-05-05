@@ -147,8 +147,11 @@ module Guardrails
       visible_text(body).length.positive?
     end
 
+    # Matches only ERB *output* tags (`<%= %>`). Control flow (`<% if %>`,
+    # `<% end %>`) and comments (`<%# %>`) don't contribute renderable
+    # content and shouldn't suppress the a11y rule.
     def has_erb_output?(body)
-      body.match?(/<%=?[\s\S]*?%>/)
+      body.match?(/<%=[\s\S]*?%>/)
     end
 
     def visible_text(body)

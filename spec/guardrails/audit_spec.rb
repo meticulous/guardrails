@@ -293,6 +293,20 @@ RSpec.describe Guardrails::Audit do
       expect(run_audit).to be_empty
     end
 
+    it "does not flag elements whose body contains only ERB control flow" do
+      write_view "app/views/x.html.erb", "<button><% if cond %>Save<% end %></button>"
+
+      # The static text "Save" is an accessible name; control flow alone
+      # shouldn't trigger helper_recommended.
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag elements whose body contains only an ERB comment" do
+      write_view "app/views/x.html.erb", "<button><%# TODO %>Save</button>"
+
+      expect(run_audit).to be_empty
+    end
+
     it "captures the line of the opening tag for multi-line elements" do
       write_view "app/views/x.html.erb", <<~ERB
         <h1>Title</h1>
