@@ -34,22 +34,24 @@ module Guardrails
     end
 
     def parse_tokens
-      file = colors_file
-      return [] unless file && file.exist?
-
-      content = File.read(file, encoding: Encoding::UTF_8)
       tokens = []
-      tokens.concat(scan(content, file, CSS_VAR_PATTERN, :css_var))
-      tokens.concat(scan(content, file, SCSS_VAR_PATTERN, :scss_var))
+      [colors_file, type_scale_file].compact.each do |file|
+        next unless file.exist?
+
+        content = File.read(file, encoding: Encoding::UTF_8)
+        tokens.concat(scan(content, file, CSS_VAR_PATTERN, :css_var))
+        tokens.concat(scan(content, file, SCSS_VAR_PATTERN, :scss_var))
+      end
       tokens
     end
 
     def detect_drift(tokens)
       lookup = tokens.to_h { |t| [HexNormalizer.normalize(t.value), t] }
       drift = []
+      definition_files = [colors_file, type_scale_file].compact
 
       stylesheets.each do |file|
-        next if file == colors_file
+        next if definition_files.include?(file)
 
         raw_content = File.read(file, encoding: Encoding::UTF_8)
         content = strip_comments(raw_content)
@@ -82,7 +84,15 @@ module Guardrails
     end
 
     def colors_file
-      relative = @config.dig("guardrails", "tokens", "colors_file")
+      configured_token_file("colors_file")
+    end
+
+    def type_scale_file
+      configured_token_file("type_scale_file")
+    end
+
+    def configured_token_file(key)
+      relative = @config.dig("guardrails", "tokens", key)
       return nil unless relative
 
       @root.join(relative)
@@ -147,20 +157,26 @@ module Guardrails
     end
 
     def print_summary(tokens)
-      file = colors_file
-      if file.nil?
-        @output.puts "Guardrails tokens: no colors_file configured in guardrails.yml"
+      sources = [colors_file, type_scale_file].compact
+      if sources.empty?
+        @output.puts "Guardrails tokens: no colors_file or type_scale_file configured in guardrails.yml"
         return
       end
-      unless file.exist?
-        @output.puts "Guardrails tokens: configured colors_file does not exist (#{file.relative_path_from(@root)})"
-        return
+
+      missing = sources.reject(&:exist?)
+      missing.each do |f|
+        @output.puts "Guardrails tokens: configured token file does not exist (#{f.relative_path_from(@root)})"
       end
+
+      existing_sources = sources.select(&:exist?)
+      return if existing_sources.empty?
+
+      labels = existing_sources.map { |f| f.relative_path_from(@root).to_s }.join(", ")
       if tokens.empty?
-        @output.puts "Guardrails tokens: 0 tokens found in #{file.relative_path_from(@root)}"
+        @output.puts "Guardrails tokens: 0 tokens found in #{labels}"
         return
       end
-      @output.puts "Guardrails tokens: #{tokens.length} token#{'s' if tokens.length != 1} found in #{file.relative_path_from(@root)}"
+      @output.puts "Guardrails tokens: #{tokens.length} token#{'s' if tokens.length != 1} found in #{labels}"
       tokens.each { |t| @output.puts "  #{t.syntax == :css_var ? '--' : '$'}#{t.name} = #{t.value}" }
     end
   end

@@ -15,12 +15,11 @@ RSpec.describe Guardrails::Tokens do
     full.write(content)
   end
 
-  def configure(colors_file:)
-    write_file "guardrails.yml", <<~YAML
-      guardrails:
-        tokens:
-          colors_file: #{colors_file}
-    YAML
+  def configure(colors_file: nil, type_scale_file: nil)
+    yaml = +"guardrails:\n  tokens:\n"
+    yaml << "    colors_file: #{colors_file}\n" if colors_file
+    yaml << "    type_scale_file: #{type_scale_file}\n" if type_scale_file
+    write_file "guardrails.yml", yaml
   end
 
   def parse
@@ -102,6 +101,23 @@ RSpec.describe Guardrails::Tokens do
       tokens = parse
       syntaxes = tokens.map(&:syntax)
       expect(syntaxes).to include(:scss_var, :css_var)
+    end
+
+    it "parses tokens from type_scale_file when configured" do
+      configure(colors_file: "colors.css", type_scale_file: "type.css")
+      write_file "colors.css", ":root { --primary: #0066ff; }\n"
+      write_file "type.css", ":root { --text-base: 1rem; --text-lg: 1.25rem; }\n"
+
+      tokens = parse
+      names = tokens.map(&:name)
+      expect(names).to include("primary", "text-base", "text-lg")
+    end
+
+    it "parses type_scale_file even when colors_file is not configured" do
+      configure(type_scale_file: "type.css")
+      write_file "type.css", ":root { --text-base: 1rem; }\n"
+
+      expect(parse.map(&:name)).to eq(["text-base"])
     end
   end
 
@@ -205,11 +221,11 @@ RSpec.describe Guardrails::Tokens do
   end
 
   describe "#run" do
-    it "reports a friendly message when no colors_file is configured" do
+    it "reports a friendly message when no token files are configured" do
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("no colors_file configured")
+      expect(output.string).to include("no colors_file or type_scale_file configured")
     end
 
     it "reports the token count and contents" do
