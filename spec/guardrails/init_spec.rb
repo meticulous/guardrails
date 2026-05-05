@@ -87,4 +87,19 @@ RSpec.describe Guardrails::Init do
     # MQ scaffolder runs after a forced write
     expect(token_file.read(encoding: Encoding::UTF_8)).to include("prefers-color-scheme")
   end
+
+  it "does not prompt when guardrails.yml exists and force is false" do
+    root.join("guardrails.yml").write("# pre-existing")
+    tty = StringIO.new("fix\nhellbroken,paths\nweird\n")
+    allow(tty).to receive(:tty?).and_return(true)
+    output = StringIO.new
+
+    described_class.new(root: root, output: output, input: tty).run
+
+    # The prompter writes the question text to output; if any prompt fired,
+    # we'd see it. Confirm no prompt traces leaked.
+    expect(output.string).not_to include("Near-match auto-fix policy:")
+    expect(output.string).not_to include("Audit scan paths")
+    expect(output.string).to include("refusing to overwrite")
+  end
 end

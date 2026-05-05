@@ -30,7 +30,11 @@ module Guardrails
     def run
       result = StackDetector.new(@root).detect
       print_summary(result)
-      overrides = collect_overrides
+
+      # Don't prompt the user if we know we won't write — keeps reruns from
+      # asking questions whose answers will be discarded.
+      overrides = config_writeable? ? collect_overrides : {}
+
       written = ConfigWriter.new(@root, output: @output).write(result, overrides: overrides, force: @force)
       if written
         scaffold_media_queries
@@ -41,6 +45,10 @@ module Guardrails
     end
 
     private
+
+    def config_writeable?
+      @force || !@root.join("guardrails.yml").exist?
+    end
 
     def collect_overrides
       prompter = Prompter.new(input: @input, output: @output)
