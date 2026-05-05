@@ -1,0 +1,15 @@
+:root {
+  --primary-500: #0066ff;
+  --primary-600: #0055dd;
+  --secondary-500: #ffaa33;
+  --neutral-900: #1a1a1a;
+  --neutral-100: #f5f5f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* TODO: fill this in — define dark-mode token overrides here */
+}
+
+@media (prefers-contrast: more) {
+  /* TODO: fill this in — define high-contrast token overrides here */
+}
