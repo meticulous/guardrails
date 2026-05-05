@@ -211,7 +211,8 @@ module Guardrails
         @root,
         output: @output,
         tokens: view_safe_tokens,
-        near_match_policy: near_match_policy
+        near_match_policy: near_match_policy,
+        near_match_threshold: near_match_threshold
       )
       applied = fixer.apply(violations)
       fixed_keys = applied.map { |r| [r.violation.file, r.violation.line, r.violation.column] }.to_set
@@ -224,18 +225,28 @@ module Guardrails
         @root,
         output: @output,
         tokens: view_safe_tokens,
-        near_match_policy: near_match_policy
+        near_match_policy: near_match_policy,
+        near_match_threshold: near_match_threshold
       ).write(violations)
     end
 
     def near_match_policy
+      tokens_config["near_match_policy"] || "notify"
+    end
+
+    def near_match_threshold
+      raw = tokens_config["near_match_threshold"]
+      raw.is_a?(Numeric) ? raw : 4
+    end
+
+    def tokens_config
       config_path = @root.join("guardrails.yml")
-      return "notify" unless config_path.exist?
+      return {} unless config_path.exist?
 
       config = YAML.safe_load_file(config_path) || {}
-      config.dig("guardrails", "tokens", "near_match_policy") || "notify"
+      config.dig("guardrails", "tokens") || {}
     rescue StandardError
-      "notify"
+      {}
     end
 
     def view_safe_tokens

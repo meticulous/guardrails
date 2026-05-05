@@ -261,6 +261,42 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "configurable near_match_threshold" do
+    def configure_tokens(near_match_threshold:)
+      root.join("guardrails.yml").write({
+        "guardrails" => {
+          "tokens" => {
+            "colors_file" => "tokens.css",
+            "near_match_threshold" => near_match_threshold
+          }
+        }
+      }.to_yaml)
+      root.join("tokens.css").write(":root { --primary: #0066ff; }\n")
+    end
+
+    it "respects a custom near_match_threshold from guardrails.yml in suggest mode" do
+      configure_tokens(near_match_threshold: 0) # exact-only — disable near matches
+      write_view "app/views/x.html.erb", '<svg fill="#0066fe"></svg>' # 1 channel off
+
+      described_class.new(root: root, output: StringIO.new, suggest: true).run
+
+      md = Dir.glob(root.join("doc/guardrails-suggestions-*.md")).first
+      content = File.read(md, encoding: Encoding::UTF_8)
+      expect(content).not_to include("near match")
+    end
+
+    it "still emits near-match suggestions at the default threshold (4)" do
+      configure_tokens(near_match_threshold: 4)
+      write_view "app/views/x.html.erb", '<svg fill="#0066fe"></svg>'
+
+      described_class.new(root: root, output: StringIO.new, suggest: true).run
+
+      md = Dir.glob(root.join("doc/guardrails-suggestions-*.md")).first
+      content = File.read(md, encoding: Encoding::UTF_8)
+      expect(content).to include("near match")
+    end
+  end
+
   describe "configurable scan_paths and ignore" do
     def configure(audit_config)
       root.join("guardrails.yml").write({ "guardrails" => { "audit" => audit_config } }.to_yaml)

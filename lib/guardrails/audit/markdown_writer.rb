@@ -24,11 +24,12 @@ module Guardrails
         }
       }.freeze
 
-      def initialize(root, output: $stdout, now: Time.now, tokens: [], near_match_policy: "notify")
+      def initialize(root, output: $stdout, now: Time.now, tokens: [], near_match_policy: "notify",
+                     near_match_threshold: TokenMatcher::NEAR_MATCH_THRESHOLD)
         @root = Pathname(root)
         @output = output
         @now = now
-        @matcher = TokenMatcher.new(tokens)
+        @matcher = TokenMatcher.new(tokens, near_match_threshold: near_match_threshold)
         @near_match_policy = near_match_policy
       end
 

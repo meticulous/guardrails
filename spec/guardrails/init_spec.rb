@@ -65,7 +65,8 @@ RSpec.describe Guardrails::Init do
   end
 
   it "honors prompted overrides for scan_paths and ignore" do
-    tty = StringIO.new("\nlib/templates,app/views\nconfig\n") # default policy, custom paths
+    # default policy, default threshold, custom paths, custom ignore
+    tty = StringIO.new("\n\nlib/templates,app/views\nconfig\n")
     allow(tty).to receive(:tty?).and_return(true)
 
     described_class.new(root: root, output: StringIO.new, input: tty).run
@@ -73,6 +74,17 @@ RSpec.describe Guardrails::Init do
     written = YAML.safe_load_file(root.join("guardrails.yml"))
     expect(written["guardrails"]["audit"]["scan_paths"]).to eq(%w[lib/templates app/views])
     expect(written["guardrails"]["audit"]["ignore"]).to eq(%w[config])
+  end
+
+  it "honors a prompted near_match_threshold" do
+    # accept default policy, set threshold to 1, accept default paths/ignore
+    tty = StringIO.new("\n1\n\n\n")
+    allow(tty).to receive(:tty?).and_return(true)
+
+    described_class.new(root: root, output: StringIO.new, input: tty).run
+
+    written = YAML.safe_load_file(root.join("guardrails.yml"))
+    expect(written["guardrails"]["tokens"]["near_match_threshold"]).to eq(1)
   end
 
   it "overwrites an existing guardrails.yml when force is true" do

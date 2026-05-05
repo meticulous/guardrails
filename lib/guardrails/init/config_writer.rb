@@ -65,12 +65,25 @@ module Guardrails
               "strategy" => result.strategy.to_s,
               "colors_file" => token_paths["colors_file"],
               "type_scale_file" => token_paths["type_scale_file"],
-              "near_match_policy" => overrides.fetch(:near_match_policy, "notify")
+              "near_match_policy" => overrides.fetch(:near_match_policy, "notify"),
+              "near_match_threshold" => overrides.fetch(:near_match_threshold, 4)
             }
           }
         }
 
-        header(result) + config.to_yaml(line_width: -1)
+        header(result) + config.to_yaml(line_width: -1) + threshold_footer
+      end
+
+      def threshold_footer
+        <<~YAML
+
+          # near_match_threshold scale (max per-channel R/G/B difference, 0..255):
+          #   0  = exact match only — no near-match suggestions ever fire
+          #   1  = nearly identical (probably a typo in the hex)
+          #   4  = visually similar (default)
+          #   10 = loose — same color family
+          #   20+ = very loose, expect false matches
+        YAML
       end
 
       def header(result)
