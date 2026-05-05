@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 namespace :guardrails do
-  desc "Initialize Guardrails configuration and analyze stylesheet stack"
+  desc "Initialize Guardrails configuration and analyze stylesheet stack (FORCE=1 to overwrite existing config)"
   task :init do
     require "guardrails/init"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
-    Guardrails::Init.new(root: root).run
+    force = %w[1 true yes].include?(ENV["FORCE"]&.downcase)
+    Guardrails::Init.new(root: root, force: force).run
   end
 
   desc "Audit views and components for UI drift (SUGGEST=1, APPLY=1, FORMAT=json)"
