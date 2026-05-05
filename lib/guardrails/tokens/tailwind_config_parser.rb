@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "pathname"
-
 module Guardrails
   class Tokens
     # Best-effort regex/character-walk parser for Tailwind v3 config files.
