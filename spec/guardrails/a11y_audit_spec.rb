@@ -72,6 +72,24 @@ RSpec.describe Guardrails::A11yAudit do
 
       expect(run_audit).to be_empty
     end
+
+    it "skips button_name when the body contains ERB output (deferred to helper_recommended)" do
+      write_view "app/views/x.html.erb", "<button><%= label %></button>"
+
+      findings = run_audit
+      expect(findings.map(&:rule)).not_to include(:button_name)
+    end
+
+    it "still flags a literally empty button next to one with ERB content" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <button><%= dynamic %></button>
+        <button></button>
+      ERB
+
+      findings = run_audit.select { |f| f.rule == :button_name }
+      expect(findings.length).to eq(1)
+      expect(findings.first.line).to eq(2)
+    end
   end
 
   describe "link_name" do
@@ -103,6 +121,13 @@ RSpec.describe Guardrails::A11yAudit do
       write_view "app/views/x.html.erb", '<a name="top"></a>'
 
       expect(run_audit).to be_empty
+    end
+
+    it "skips link_name when the body contains ERB output (deferred to helper_recommended)" do
+      write_view "app/views/x.html.erb", '<a href="/x"><%= label %></a>'
+
+      findings = run_audit
+      expect(findings.map(&:rule)).not_to include(:link_name)
     end
   end
 

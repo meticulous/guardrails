@@ -203,6 +203,29 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
     end
   end
 
+  describe "helper_recommended suggestion text" do
+    it "renders an element-specific Rails-helper recommendation for button" do
+      v = violation(type: :helper_recommended, file: "app/views/x.html.erb",
+                    value: "button", snippet: "<button><%= label %></button>")
+
+      described_class.new(root, output: StringIO.new, now: now).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("`tag.button(label, ...)`")
+      expect(content).to include("`button_to(label, path)`")
+    end
+
+    it "renders link_to suggestion for a tags" do
+      v = violation(type: :helper_recommended, file: "app/views/x.html.erb",
+                    value: "a", snippet: '<a href="/x"><%= label %></a>')
+
+      described_class.new(root, output: StringIO.new, now: now).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("`link_to(label, path, ...)`")
+    end
+  end
+
   describe "near-match suggestions" do
     def token(name:, value:, syntax: :css_var)
       Guardrails::Tokens::Token.new(

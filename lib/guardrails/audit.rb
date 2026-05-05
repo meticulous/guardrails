@@ -20,6 +20,15 @@ module Guardrails
     CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
+    # Elements where wrapping ERB output in literal HTML obscures static
+    # analysis (the body looks empty after ERB masking). Mapped to the
+    # Rails helper that handles the same case more cleanly.
+    HELPER_RECOMMENDED_TAGS = {
+      "button" => "tag.button(label, ...) or button_to(label, path) for forms",
+      "a" => "link_to(label, path, ...)"
+    }.freeze
+    ERB_OUTPUT_PATTERN = /<%=?[\s\S]*?%>/
+
     # Attributes whose values legitimately carry color literals. Scoping
     # raw_color detection to these keeps href="#section" or data-id="abc"
     # from being misreported as color drift.
@@ -96,7 +105,8 @@ module Guardrails
 
       detect_inline_styles(masked_no_erb, file, original_lines) +
         detect_raw_color_literals(masked_no_erb, file, original_lines) +
-        detect_tailwind_arbitrary(masked_no_erb, file, original_lines)
+        detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
+        detect_helper_recommended(content, file, original_lines)
     end
 
     def detect_inline_styles(content, file, original_lines)
@@ -140,6 +150,32 @@ module Guardrails
         end
       end
       violations
+    end
+
+    def detect_helper_recommended(content, file, original_lines)
+      results = []
+      HELPER_RECOMMENDED_TAGS.each_key do |tag|
+        pattern = /<#{tag}\b[^>]*>([\s\S]*?)<\/#{tag}>/m
+        content.scan(pattern) do
+          m = Regexp.last_match
+          body = m[1]
+          next unless body.match?(ERB_OUTPUT_PATTERN)
+
+          offset = m.begin(0)
+          line_num = m.pre_match.count("\n") + 1
+          col_base = m.pre_match.rindex("\n")
+          column = col_base ? offset - col_base : offset + 1
+          results << Violation.new(
+            type: :helper_recommended,
+            file: relative(file),
+            line: line_num,
+            column: column,
+            snippet: snippet(original_lines, line_num - 1),
+            value: tag
+          )
+        end
+      end
+      results
     end
 
     def detect_tailwind_arbitrary(content, file, original_lines)

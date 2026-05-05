@@ -261,6 +261,52 @@ RSpec.describe Guardrails::Audit do
     end
   end
 
+  describe "helper_recommended detection" do
+    it "flags <button> with ERB content inside" do
+      write_view "app/views/x.html.erb", "<button><%= label %></button>"
+
+      v = run_audit
+      expect(v.length).to eq(1)
+      expect(v.first.type).to eq(:helper_recommended)
+      expect(v.first.value).to eq("button")
+    end
+
+    it "flags <a> with ERB content inside" do
+      write_view "app/views/x.html.erb", '<a href="/x"><%= label %></a>'
+
+      v = run_audit
+      expect(v.length).to eq(1)
+      expect(v.first.type).to eq(:helper_recommended)
+      expect(v.first.value).to eq("a")
+    end
+
+    it "does not flag elements without ERB content" do
+      write_view "app/views/x.html.erb", "<button>Save</button><a href=\"/x\">Home</a>"
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag elements where ERB is inside attributes only" do
+      write_view "app/views/x.html.erb", '<a href="<%= path %>">Click</a>'
+
+      # The body is "Click" (no ERB), so no helper recommendation
+      expect(run_audit).to be_empty
+    end
+
+    it "captures the line of the opening tag for multi-line elements" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <h1>Title</h1>
+        <button class="primary">
+          <%= label %>
+        </button>
+      ERB
+
+      v = run_audit
+      expect(v.length).to eq(1)
+      expect(v.first.line).to eq(2)
+    end
+  end
+
   describe "configurable near_match_threshold" do
     def configure_tokens(near_match_threshold:)
       root.join("guardrails.yml").write({

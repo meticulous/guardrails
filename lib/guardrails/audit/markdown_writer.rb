@@ -21,7 +21,16 @@ module Guardrails
         tailwind_arbitrary: {
           rule: "Avoid arbitrary Tailwind values — extend the theme or use an existing utility.",
           replacement: "Add this value to your Tailwind theme (e.g. theme.colors.* or theme.fontSize.*) and reference the named utility instead."
+        },
+        helper_recommended: {
+          rule: "Wrapping ERB output in a literal element hides intent from static analysis and a11y tooling.",
+          replacement: "Use the Rails helper for this element so attributes (including aria-*) flow through one place."
         }
+      }.freeze
+
+      HELPER_REPLACEMENTS = {
+        "button" => "Replace with `tag.button(label, ...)` (or `button_to(label, path)` for form-submission buttons).",
+        "a" => "Replace with `link_to(label, path, ...)` so the link text is explicit and helper-managed."
       }.freeze
 
       # Per-violation-type token compatibility for *suggestions*. Order
@@ -107,10 +116,12 @@ module Guardrails
           lines << "  - **Rule:** #{suggestion[:rule]}"
 
           match = visible_match(v)
+          replacement_text = helper_specific_replacement(v) || suggestion[:replacement]
+
           if match
             lines << format_match_line(v, match)
-          elsif !suggestion[:replacement].empty?
-            lines << "  - **Suggested replacement:** #{suggestion[:replacement]}"
+          elsif !replacement_text.empty?
+            lines << "  - **Suggested replacement:** #{replacement_text}"
           end
         end
         lines.join("\n") + "\n"
@@ -135,6 +146,12 @@ module Guardrails
         return nil if match.kind == :near && @near_match_policy == "leave"
 
         match
+      end
+
+      def helper_specific_replacement(violation)
+        return nil unless violation.type == :helper_recommended
+
+        HELPER_REPLACEMENTS[violation.value]
       end
 
       def format_match_line(violation, match)
