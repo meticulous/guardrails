@@ -3,6 +3,7 @@
 require "pathname"
 require "yaml"
 require_relative "hex_normalizer"
+require_relative "tokens/tailwind_config_parser"
 
 module Guardrails
   class Tokens
@@ -42,7 +43,24 @@ module Guardrails
         tokens.concat(scan(content, file, CSS_VAR_PATTERN, :css_var))
         tokens.concat(scan(content, file, SCSS_VAR_PATTERN, :scss_var))
       end
+      tokens.concat(parse_tailwind_config)
       tokens
+    end
+
+    def parse_tailwind_config
+      file = @root.join("tailwind.config.js")
+      return [] unless file.exist?
+
+      content = File.read(file, encoding: Encoding::UTF_8)
+      TailwindConfigParser.parse(content).map do |entry|
+        Token.new(
+          name: entry.name,
+          value: entry.value,
+          syntax: :tailwind,
+          file: file.relative_path_from(@root).to_s,
+          line: 0
+        )
+      end
     end
 
     def detect_drift(tokens)
@@ -52,6 +70,7 @@ module Guardrails
 
       stylesheets.each do |file|
         next if definition_files.include?(file)
+        next if file == @root.join("tailwind.config.js")
 
         raw_content = File.read(file, encoding: Encoding::UTF_8)
         content = strip_comments(raw_content)
@@ -151,9 +170,12 @@ module Guardrails
     end
 
     def format_token_name(token)
-      prefix = token.syntax == :css_var ? "var(--" : "$"
-      suffix = token.syntax == :css_var ? ")" : ""
-      "#{prefix}#{token.name}#{suffix}"
+      case token.syntax
+      when :css_var then "var(--#{token.name})"
+      when :scss_var then "$#{token.name}"
+      when :tailwind then "Tailwind theme color `#{token.name}`"
+      else token.name.to_s
+      end
     end
 
     def print_summary(tokens)

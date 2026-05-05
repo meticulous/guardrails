@@ -119,6 +119,33 @@ RSpec.describe Guardrails::Tokens do
 
       expect(parse.map(&:name)).to eq(["text-base"])
     end
+
+    it "auto-discovers tokens from tailwind.config.js at the repo root" do
+      write_file "tailwind.config.js", <<~JS
+        module.exports = {
+          theme: {
+            extend: {
+              colors: { primary: "#0066ff", accent: "#ffaa33" }
+            }
+          }
+        }
+      JS
+
+      tokens = parse
+      tailwind = tokens.select { |t| t.syntax == :tailwind }
+      expect(tailwind.map(&:name)).to contain_exactly("primary", "accent")
+    end
+
+    it "combines tokens from colors_file and tailwind.config.js" do
+      configure(colors_file: "tokens.css")
+      write_file "tokens.css", ":root { --neutral-100: #f5f5f5; }\n"
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+
+      names = parse.map(&:name)
+      expect(names).to include("neutral-100", "primary")
+    end
   end
 
   describe "#detect_drift" do
@@ -184,6 +211,20 @@ RSpec.describe Guardrails::Tokens do
       write_file "app/assets/stylesheets/_more-tokens.scss", "$another: #abcdef;"
 
       expect(detect).to be_empty
+    end
+
+    it "matches stylesheet drift against tailwind.config.js theme colors" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$other: #abcdef;"
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { brand: "#0066ff" } } }
+      JS
+      write_file "app/assets/stylesheets/_button.scss", ".btn { color: #0066ff; }"
+
+      drift = detect
+      expect(drift.length).to eq(1)
+      expect(drift.first.matched_token.name).to eq("brand")
+      expect(drift.first.matched_token.syntax).to eq(:tailwind)
     end
 
     it "ignores hex literals inside line comments" do
