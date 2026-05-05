@@ -140,6 +140,18 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
       expect(content).to include("matches token `primary`")
     end
 
+    it "matches type-scale values like 1rem to a defined size token" do
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "1rem",
+                    snippet: '<div class="text-[1rem]">x</div>')
+      tokens = [token(name: "text-base", value: "1rem", syntax: :css_var)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("matches token `text-base`")
+      expect(content).to include("var(--text-base)")
+    end
+
     it "falls back to the stock suggestion when no token matches" do
       v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#abcdef",
                     snippet: '<svg fill="#abcdef"></svg>')

@@ -33,28 +33,29 @@ module Guardrails
         @now = now
       end
 
-      def write(detection_result)
+      def write(detection_result, overrides: {}, force: false)
         path = @root.join(CONFIG_FILENAME)
-        if path.exist?
+        existed = path.exist?
+        if existed && !force
           @output.puts "#{CONFIG_FILENAME} already exists — refusing to overwrite."
-          @output.puts "Delete or rename it to re-run init."
+          @output.puts "Delete or rename it, or set FORCE=1 to re-run init."
           return false
         end
 
-        path.write(yaml_for(detection_result))
-        @output.puts "Wrote #{CONFIG_FILENAME}"
+        path.write(yaml_for(detection_result, overrides))
+        @output.puts(existed ? "Overwrote #{CONFIG_FILENAME}" : "Wrote #{CONFIG_FILENAME}")
         true
       end
 
       private
 
-      def yaml_for(result)
+      def yaml_for(result, overrides)
         token_paths = DEFAULT_TOKEN_PATHS.fetch(result.strategy)
         config = {
           "guardrails" => {
             "audit" => {
-              "scan_paths" => ["app/views", "app/components"],
-              "ignore" => ["app/views/layouts"]
+              "scan_paths" => overrides.fetch(:scan_paths, ["app/views", "app/components"]),
+              "ignore" => overrides.fetch(:ignore, ["app/views/layouts"])
             },
             "icons" => {
               "source" => "app/assets/images/icons",
@@ -64,7 +65,7 @@ module Guardrails
               "strategy" => result.strategy.to_s,
               "colors_file" => token_paths["colors_file"],
               "type_scale_file" => token_paths["type_scale_file"],
-              "near_match_policy" => "notify"
+              "near_match_policy" => overrides.fetch(:near_match_policy, "notify")
             }
           }
         }

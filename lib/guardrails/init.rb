@@ -5,9 +5,14 @@ require "yaml"
 require_relative "init/stack_detector"
 require_relative "init/config_writer"
 require_relative "init/media_query_scaffolder"
+require_relative "init/prompter"
 
 module Guardrails
   class Init
+    NEAR_MATCH_POLICY_CHOICES = %w[notify fix leave].freeze
+    DEFAULT_SCAN_PATHS = %w[app/views app/components].freeze
+    DEFAULT_IGNORE = %w[app/views/layouts].freeze
+
     STRATEGY_LABELS = {
       css_custom_properties: "CSS custom properties",
       scss_variables: "SCSS variables",
@@ -15,24 +20,58 @@ module Guardrails
       none: "No stylesheets found"
     }.freeze
 
-    def initialize(root:, output: $stdout)
+    def initialize(root:, output: $stdout, input: $stdin, force: false)
       @root = Pathname(root)
       @output = output
+      @input = input
+      @force = force
     end
 
     def run
       result = StackDetector.new(@root).detect
       print_summary(result)
-      written = ConfigWriter.new(@root, output: @output).write(result)
+
+      # Don't prompt the user if we know we won't write — keeps reruns from
+      # asking questions whose answers will be discarded.
+      overrides = config_writeable? ? collect_overrides : {}
+
+      written = ConfigWriter.new(@root, output: @output).write(result, overrides: overrides, force: @force)
       if written
         scaffold_media_queries
       else
-        @output.puts "Media queries: skipped (delete guardrails.yml and re-run init to scaffold)"
+        @output.puts "Media queries: skipped (delete guardrails.yml or set FORCE=1 to re-run init)"
       end
       result
     end
 
     private
+
+    def config_writeable?
+      @force || !@root.join("guardrails.yml").exist?
+    end
+
+    def collect_overrides
+      prompter = Prompter.new(input: @input, output: @output)
+      {
+        near_match_policy: prompter.choose(
+          "Near-match auto-fix policy:",
+          choices: NEAR_MATCH_POLICY_CHOICES,
+          default: "notify"
+        ),
+        scan_paths: csv(prompter.ask(
+          "Audit scan paths (comma-separated):",
+          default: DEFAULT_SCAN_PATHS.join(",")
+        )),
+        ignore: csv(prompter.ask(
+          "Audit ignore globs (comma-separated):",
+          default: DEFAULT_IGNORE.join(",")
+        ))
+      }
+    end
+
+    def csv(value)
+      value.to_s.split(",").map(&:strip).reject(&:empty?)
+    end
 
     def scaffold_media_queries
       file = configured_colors_file
