@@ -179,18 +179,22 @@ module Guardrails
     end
 
     def print_summary(tokens)
-      sources = [colors_file, type_scale_file].compact
-      if sources.empty?
-        @output.puts "Guardrails tokens: no colors_file or type_scale_file configured in guardrails.yml"
+      configured_sources = [colors_file, type_scale_file].compact
+      tailwind_path = @root.join("tailwind.config.js")
+      tailwind_source = tailwind_path.exist? ? tailwind_path : nil
+      all_sources = configured_sources + [tailwind_source].compact
+
+      if all_sources.empty?
+        @output.puts "Guardrails tokens: no colors_file, type_scale_file, or tailwind.config.js found"
         return
       end
 
-      missing = sources.reject(&:exist?)
+      missing = configured_sources.reject(&:exist?)
       missing.each do |f|
         @output.puts "Guardrails tokens: configured token file does not exist (#{f.relative_path_from(@root)})"
       end
 
-      existing_sources = sources.select(&:exist?)
+      existing_sources = all_sources.select(&:exist?)
       return if existing_sources.empty?
 
       labels = existing_sources.map { |f| f.relative_path_from(@root).to_s }.join(", ")
@@ -199,7 +203,7 @@ module Guardrails
         return
       end
       @output.puts "Guardrails tokens: #{tokens.length} token#{'s' if tokens.length != 1} found in #{labels}"
-      tokens.each { |t| @output.puts "  #{t.syntax == :css_var ? '--' : '$'}#{t.name} = #{t.value}" }
+      tokens.each { |t| @output.puts "  #{format_token_name(t)} = #{t.value}" }
     end
   end
 end

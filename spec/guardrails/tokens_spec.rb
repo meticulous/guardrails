@@ -266,7 +266,31 @@ RSpec.describe Guardrails::Tokens do
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("no colors_file or type_scale_file configured")
+      expect(output.string).to include("no colors_file, type_scale_file, or tailwind.config.js")
+    end
+
+    it "names tailwind.config.js as a recognized source when it's the only one" do
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("tailwind.config.js")
+      expect(output.string).not_to include("no colors_file")
+    end
+
+    it "labels tailwind tokens distinctly in the per-token list" do
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("Tailwind theme color `primary`")
+      expect(output.string).not_to match(/^\s*\$primary =/)
     end
 
     it "reports the token count and contents" do
