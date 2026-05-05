@@ -177,7 +177,48 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
 
       content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
       expect(content).to include("matches token `text-base`")
-      expect(content).to include("var(--text-base)")
+      # css_var fallback for tailwind_arbitrary should stay inside Tailwind
+      # arbitrary syntax — `text-[var(--text-base)]`, not bare `var(--text-base)`.
+      expect(content).to include("text-[var(--text-base)]")
+    end
+
+    it "preserves variant prefixes in the Tailwind utility suggestion" do
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<div class="lg:hover:bg-[#0066ff]">x</div>')
+      tokens = [token(name: "primary", value: "#0066ff", syntax: :tailwind)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `lg:hover:bg-primary`")
+    end
+
+    it "preserves variant prefixes in the css_var fallback for tailwind_arbitrary" do
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<div class="lg:hover:bg-[#0066ff]">x</div>')
+      tokens = [token(name: "primary", value: "#0066ff", syntax: :css_var)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("lg:hover:bg-[var(--primary)]")
+    end
+
+    it "prefers a :tailwind near match over an equally-close :css_var match" do
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "#0066fe",
+                    snippet: '<div class="bg-[#0066fe]">x</div>')
+      tokens = [
+        token(name: "primary", value: "#0066ff", syntax: :css_var),
+        token(name: "primary", value: "#0066ff", syntax: :tailwind)
+      ]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `bg-primary`")
+      # Should NOT fall back to the css_var arbitrary suggestion when a
+      # tailwind near match is available.
+      expect(content).not_to include("var(--primary)")
     end
 
     it "falls back to the stock suggestion when no token matches" do

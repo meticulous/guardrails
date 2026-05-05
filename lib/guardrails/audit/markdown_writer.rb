@@ -33,15 +33,15 @@ module Guardrails
         "a" => "Replace with `link_to(label, path, ...)` so the link text is explicit and helper-managed."
       }.freeze
 
-      # Per-violation-type token compatibility for *suggestions*. Order
-      # matters — later syntaxes win on lookup-key collision, so the
-      # preferred substitute appears first in code-style and last in this
-      # array. tailwind_arbitrary suggests :tailwind utility names by
-      # preference but falls back to :css_var (parameterized arbitrary
-      # `bg-[var(--name)]`) when no Tailwind theme entry matches.
+      # Per-violation-type token compatibility for *suggestions*, expressed
+      # as an ordered list of matcher layers. The first layer that produces
+      # any match (exact or near) wins, so the preferred substitute syntax
+      # is genuinely preferred even on tied near matches. tailwind_arbitrary
+      # tries :tailwind utility names first; if no theme entry matches, it
+      # falls back to :css_var (parameterized arbitrary `bg-[var(--name)]`).
       COMPATIBLE_SYNTAX = {
-        raw_color: [:css_var],
-        tailwind_arbitrary: [:css_var, :tailwind]
+        raw_color: [[:css_var]],
+        tailwind_arbitrary: [[:tailwind], [:css_var]]
       }.freeze
 
       def initialize(root, output: $stdout, now: Time.now, tokens: [], near_match_policy: "notify",
@@ -128,24 +128,26 @@ module Guardrails
       end
 
       def build_matchers(tokens, threshold)
-        COMPATIBLE_SYNTAX.transform_values do |syntaxes|
-          # Order tokens so syntaxes earlier in the list act as fallbacks
-          # and later syntaxes win on lookup-key collision (Hash#[]=
-          # overwrites in iteration order).
-          ordered = syntaxes.flat_map { |syn| tokens.select { |t| t.syntax == syn } }
-          TokenMatcher.new(ordered, near_match_threshold: threshold)
+        COMPATIBLE_SYNTAX.transform_values do |layers|
+          layers.map do |syntaxes|
+            subset = tokens.select { |t| syntaxes.include?(t.syntax) }
+            TokenMatcher.new(subset, near_match_threshold: threshold)
+          end
         end
       end
 
       def visible_match(violation)
-        matcher = @matchers[violation.type]
-        return nil unless matcher
+        matchers = @matchers[violation.type]
+        return nil unless matchers
 
-        match = matcher.match(violation.value)
-        return nil unless match
-        return nil if match.kind == :near && @near_match_policy == "leave"
+        matchers.each do |matcher|
+          match = matcher.match(violation.value)
+          next unless match
+          next if match.kind == :near && @near_match_policy == "leave"
 
-        match
+          return match
+        end
+        nil
       end
 
       def helper_specific_replacement(violation)
@@ -168,21 +170,48 @@ module Guardrails
 
       def format_token_reference(violation, token)
         case token.syntax
-        when :css_var then "var(--#{token.name})"
+        when :css_var
+          # For tailwind_arbitrary, the only valid replacement that stays
+          # inside class="..." is another arbitrary value. Wrap the var()
+          # in the original utility prefix so the suggestion is something
+          # the user can actually paste in.
+          if violation && violation.type == :tailwind_arbitrary
+            tailwind_arbitrary_with_var(violation, token)
+          else
+            "var(--#{token.name})"
+          end
         when :scss_var then "$#{token.name}"
         when :tailwind then tailwind_utility_for(violation, token)
         else token.name
         end
       end
 
-      # Pulls the utility prefix out of the violation's snippet (e.g. `bg`
-      # from `class="bg-[#0066ff]"`) and joins it with the token name. Falls
-      # back to the bare token name when we can't recover the prefix.
+      # Capture the *full* utility prefix (including any chained variants
+      # like `lg:hover:` or `[&>div]:`) from the violation's snippet, then
+      # append the token name. Greedy `[^\s"'`]+` followed by `-[value]`
+      # backtracks until the bracket boundary, so it reaches all the way to
+      # the start of the variant chain. Falls back to the bare token name
+      # if the snippet doesn't contain the original arbitrary value.
       def tailwind_utility_for(violation, token)
         return token.name unless violation && violation.snippet
 
-        match = violation.snippet.match(/(\w[\w-]*)-\[#{Regexp.escape(violation.value)}\]/)
-        match ? "#{match[1]}-#{token.name}" : token.name
+        prefix = extract_tailwind_prefix(violation)
+        prefix ? "#{prefix}-#{token.name}" : token.name
+      end
+
+      def tailwind_arbitrary_with_var(violation, token)
+        prefix = extract_tailwind_prefix(violation)
+        prefix ? "#{prefix}-[var(--#{token.name})]" : "var(--#{token.name})"
+      end
+
+      def extract_tailwind_prefix(violation)
+        return nil unless violation.snippet && violation.value
+
+        # `[^\s"'`]+` is greedy, so for `class="lg:hover:bg-[#0066ff]"` the
+        # engine backtracks until `-[#0066ff]` matches and the capture
+        # lands on the full `lg:hover:bg`.
+        match = violation.snippet.match(/([^\s"'`]+)-\[#{Regexp.escape(violation.value)}\]/)
+        match ? match[1] : nil
       end
     end
   end
