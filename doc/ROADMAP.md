@@ -127,7 +127,7 @@ Untouched.
 | A11y | **Static checks in V0/V1.** axe-core full wrapper deferred — bundling Capybara + headless Chrome was too heavy; documented integration path instead. |
 | Sample app | **Yes, fake-Rails-app structure** (not bootable). |
 | Tailwind v4 | **Supported in V0** via `@theme` directives. |
-| Tailwind v3 (`tailwind.config.js`) | **Supported in V0** via best-effort regex parsing. v4 `@theme` is the recommended path. |
+| Tailwind v3 (`tailwind.config.js`) | **Supported in V0, colors-only by design.** Best-effort regex parsing of `theme.colors` / `theme.extend.colors`. Non-color tokens (spacing, fontSize, fontFamily, screens) are NOT extracted from v3 configs — projects that want non-color token coverage should migrate to Tailwind v4 `@theme {}` directives, which our existing CSS-custom-property scanner parses cleanly. |
 | Suggestions-md location | `doc/guardrails-suggestions-{TIMESTAMP}.md`. |
 | Near-match handling | Always *suggest* by default. Per-project policy in `guardrails.yml` (`fix` / `leave` / `notify`). |
 | `--strict` flag | **Dropped from V0.** No distinction beyond default exit-1-on-violations until severity levels exist. |
@@ -157,5 +157,3 @@ If a bootable Rails server is needed for the talk demo, that's a separate scaffo
 2. **Tailwind utility-name mapping for arbitrary-value auto-fix.** `bg-[#0066ff]` → `bg-primary` requires knowing which Tailwind utility name corresponds to which token. The Tailwind v3 parser captures token names; mapping back to utility class names is a separate transform.
 
 3. **Near-match threshold in `guardrails.yml`.** Currently hard-coded to 4 channel-units inside `TokenMatcher::NEAR_MATCH_THRESHOLD`. Should it be a per-project knob in `guardrails.yml` for users with stricter or looser tolerance?
-
-4. **Tailwind config beyond colors.** v3 parser handles `theme.colors` only. Spacing, fontSize, fontFamily etc. would extend coverage but the regex approach gets fragile fast. Stick with @theme for non-color tokens?
