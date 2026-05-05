@@ -210,7 +210,7 @@ module Guardrails
       fixer = AutoFixer.new(
         @root,
         output: @output,
-        tokens: view_safe_tokens,
+        tokens: load_tokens,
         near_match_policy: near_match_policy,
         near_match_threshold: near_match_threshold
       )
@@ -224,7 +224,7 @@ module Guardrails
       MarkdownWriter.new(
         @root,
         output: @output,
-        tokens: view_safe_tokens,
+        tokens: load_tokens,
         near_match_policy: near_match_policy,
         near_match_threshold: near_match_threshold
       ).write(violations)
@@ -249,14 +249,11 @@ module Guardrails
       {}
     end
 
-    def view_safe_tokens
-      # Views (HTML/ERB) cannot reference SCSS variables — `$primary` only
-      # exists at SCSS compile time. CSS custom properties (`var(--primary)`)
-      # work in any HTML/CSS context, so those are the only tokens that map
-      # cleanly into a view violation's source.
-      load_tokens.select { |t| t.syntax == :css_var }
-    end
-
+    # Returns the full token list across colors_file, type_scale_file, and
+    # tailwind.config.js. MarkdownWriter and AutoFixer filter by token
+    # syntax against the current violation type — `$primary` doesn't
+    # compile in HTML attrs and `bg-primary` only makes sense for
+    # tailwind_arbitrary contexts, so the dispatch happens at use.
     def load_tokens
       require_relative "tokens"
       Tokens.new(root: @root, output: StringIO.new).parse_tokens

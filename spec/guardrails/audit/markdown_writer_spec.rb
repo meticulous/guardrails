@@ -98,13 +98,25 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
     it "suggests the matching token reference for raw_color when an exact match exists" do
       v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066ff",
                     snippet: '<svg fill="#0066ff"></svg>')
+      tokens = [token(name: "primary", value: "#0066ff", syntax: :css_var)]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `var(--primary)`")
+      expect(content).to include("matches token `primary`")
+    end
+
+    it "does NOT suggest scss_var tokens for raw_color violations (they don't compile in HTML attrs)" do
+      v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<svg fill="#0066ff"></svg>')
       tokens = [token(name: "primary", value: "#0066ff", syntax: :scss_var)]
 
       described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
 
       content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
-      expect(content).to include("Use `$primary`")
-      expect(content).to include("matches token `primary`")
+      expect(content).not_to include("$primary")
+      expect(content).to include("Use a CSS custom property") # falls back to stock
     end
 
     it "suggests var(--name) for CSS custom property tokens" do
@@ -121,7 +133,7 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
     it "matches normalized hex (case + short form)" do
       v = violation(type: :raw_color, file: "app/views/x.html.erb", value: "#fa3",
                     snippet: '<svg fill="#fa3"></svg>')
-      tokens = [token(name: "secondary", value: "#FFAA33")]
+      tokens = [token(name: "secondary", value: "#FFAA33", syntax: :css_var)]
 
       described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
 
@@ -129,18 +141,34 @@ RSpec.describe Guardrails::Audit::MarkdownWriter do
       expect(content).to include("matches token `secondary`")
     end
 
-    it "matches Tailwind arbitrary values against token values" do
+    it "suggests a Tailwind utility name for tailwind_arbitrary violations" do
       v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "#0066ff",
                     snippet: '<div class="bg-[#0066ff]">x</div>')
-      tokens = [token(name: "primary", value: "#0066ff", syntax: :scss_var)]
+      tokens = [token(name: "primary", value: "#0066ff", syntax: :tailwind)]
 
       described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
 
       content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `bg-primary`")
       expect(content).to include("matches token `primary`")
     end
 
-    it "matches type-scale values like 1rem to a defined size token" do
+    it "prefers a Tailwind utility over a parameterized arbitrary when both are available" do
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "#0066ff",
+                    snippet: '<div class="bg-[#0066ff]">x</div>')
+      tokens = [
+        token(name: "primary", value: "#0066ff", syntax: :css_var),
+        token(name: "primary", value: "#0066ff", syntax: :tailwind)
+      ]
+
+      described_class.new(root, output: StringIO.new, now: now, tokens: tokens).write([v])
+
+      content = root.join("doc/guardrails-suggestions-20260504T163000Z.md").read(encoding: Encoding::UTF_8)
+      expect(content).to include("Use `bg-primary`")
+      expect(content).not_to include("var(--primary)")
+    end
+
+    it "matches type-scale values like 1rem to a defined size token (css_var fallback)" do
       v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", value: "1rem",
                     snippet: '<div class="text-[1rem]">x</div>')
       tokens = [token(name: "text-base", value: "1rem", syntax: :css_var)]

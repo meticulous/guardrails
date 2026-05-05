@@ -103,9 +103,9 @@ RSpec.describe Guardrails::Audit::AutoFixer do
       expect(fixer.applicable?(v)).to be(false)
     end
 
-    it "skips tailwind_arbitrary violations" do
+    it "skips tailwind_arbitrary violations when no :tailwind token matches (e.g. only css_var available)" do
       v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb", line: 1, column: 1, value: "#0066ff")
-      tokens = [token(name: "primary", value: "#0066ff")]
+      tokens = [token(name: "primary", value: "#0066ff")] # default syntax is css_var
 
       fixer = described_class.new(root, output: StringIO.new, tokens: tokens)
       expect(fixer.applicable?(v)).to be(false)
@@ -187,6 +187,81 @@ RSpec.describe Guardrails::Audit::AutoFixer do
       described_class.new(root, output: StringIO.new, tokens: tokens, near_match_policy: "leave").apply([v])
 
       expect(view_content("app/views/x.html.erb")).to include("var(--primary)")
+    end
+  end
+
+  describe "tailwind_arbitrary auto-fix" do
+    def tw_token(name:, value:)
+      Guardrails::Tokens::Token.new(
+        name: name, value: value, syntax: :tailwind,
+        file: "tailwind.config.js", line: 0
+      )
+    end
+
+    it "rewrites bg-[#hex] to bg-tokenname when an exact :tailwind match exists" do
+      write_view "app/views/x.html.erb", '<div class="bg-[#0066ff]">x</div>'
+      # column points at the [
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb",
+                    line: 1, column: 16, value: "#0066ff",
+                    snippet: '<div class="bg-[#0066ff]">x</div>')
+
+      described_class.new(root, output: StringIO.new, tokens: [tw_token(name: "primary", value: "#0066ff")]).apply([v])
+
+      expect(view_content("app/views/x.html.erb")).to eq('<div class="bg-primary">x</div>')
+    end
+
+    it "preserves variant prefixes like lg:hover:" do
+      write_view "app/views/x.html.erb", '<div class="lg:hover:bg-[#0066ff]">x</div>'
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb",
+                    line: 1, column: 25, value: "#0066ff",
+                    snippet: '<div class="lg:hover:bg-[#0066ff]">x</div>')
+
+      described_class.new(root, output: StringIO.new, tokens: [tw_token(name: "primary", value: "#0066ff")]).apply([v])
+
+      expect(view_content("app/views/x.html.erb")).to include('lg:hover:bg-primary')
+    end
+
+    it "does NOT auto-fix tailwind_arbitrary against a :css_var token (still arbitrary after fix)" do
+      write_view "app/views/x.html.erb", '<div class="bg-[#0066ff]">x</div>'
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb",
+                    line: 1, column: 16, value: "#0066ff",
+                    snippet: '<div class="bg-[#0066ff]">x</div>')
+      css_var_token = Guardrails::Tokens::Token.new(
+        name: "primary", value: "#0066ff", syntax: :css_var,
+        file: "tokens.css", line: 1
+      )
+
+      result = described_class.new(root, output: StringIO.new, tokens: [css_var_token]).apply([v])
+
+      expect(result).to be_empty
+      expect(view_content("app/views/x.html.erb")).to include("bg-[#0066ff]")
+    end
+
+    it "does NOT auto-fix when no matching tailwind token exists" do
+      write_view "app/views/x.html.erb", '<div class="bg-[#abcdef]">x</div>'
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb",
+                    line: 1, column: 16, value: "#abcdef",
+                    snippet: '<div class="bg-[#abcdef]">x</div>')
+
+      described_class.new(root, output: StringIO.new, tokens: [tw_token(name: "primary", value: "#0066ff")]).apply([v])
+
+      expect(view_content("app/views/x.html.erb")).to include("bg-[#abcdef]")
+    end
+
+    it "auto-applies near matches under the fix policy" do
+      write_view "app/views/x.html.erb", '<div class="bg-[#0066fe]">x</div>'
+      v = violation(type: :tailwind_arbitrary, file: "app/views/x.html.erb",
+                    line: 1, column: 16, value: "#0066fe",
+                    snippet: '<div class="bg-[#0066fe]">x</div>')
+
+      result = described_class.new(
+        root, output: StringIO.new,
+        tokens: [tw_token(name: "primary", value: "#0066ff")],
+        near_match_policy: "fix"
+      ).apply([v])
+
+      expect(view_content("app/views/x.html.erb")).to include("bg-primary")
+      expect(result.first.kind).to eq(:near)
     end
   end
 end

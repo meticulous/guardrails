@@ -24,12 +24,23 @@ module Guardrails
         }
       }.freeze
 
+      # Per-violation-type token compatibility for *suggestions*. Order
+      # matters — later syntaxes win on lookup-key collision, so the
+      # preferred substitute appears first in code-style and last in this
+      # array. tailwind_arbitrary suggests :tailwind utility names by
+      # preference but falls back to :css_var (parameterized arbitrary
+      # `bg-[var(--name)]`) when no Tailwind theme entry matches.
+      COMPATIBLE_SYNTAX = {
+        raw_color: [:css_var],
+        tailwind_arbitrary: [:css_var, :tailwind]
+      }.freeze
+
       def initialize(root, output: $stdout, now: Time.now, tokens: [], near_match_policy: "notify",
                      near_match_threshold: TokenMatcher::NEAR_MATCH_THRESHOLD)
         @root = Pathname(root)
         @output = output
         @now = now
-        @matcher = TokenMatcher.new(tokens, near_match_threshold: near_match_threshold)
+        @matchers = build_matchers(tokens, near_match_threshold)
         @near_match_policy = near_match_policy
       end
 
@@ -97,7 +108,7 @@ module Guardrails
 
           match = visible_match(v)
           if match
-            lines << format_match_line(match)
+            lines << format_match_line(v, match)
           elsif !suggestion[:replacement].empty?
             lines << "  - **Suggested replacement:** #{suggestion[:replacement]}"
           end
@@ -105,17 +116,30 @@ module Guardrails
         lines.join("\n") + "\n"
       end
 
+      def build_matchers(tokens, threshold)
+        COMPATIBLE_SYNTAX.transform_values do |syntaxes|
+          # Order tokens so syntaxes earlier in the list act as fallbacks
+          # and later syntaxes win on lookup-key collision (Hash#[]=
+          # overwrites in iteration order).
+          ordered = syntaxes.flat_map { |syn| tokens.select { |t| t.syntax == syn } }
+          TokenMatcher.new(ordered, near_match_threshold: threshold)
+        end
+      end
+
       def visible_match(violation)
-        match = @matcher.match(violation.value)
+        matcher = @matchers[violation.type]
+        return nil unless matcher
+
+        match = matcher.match(violation.value)
         return nil unless match
         return nil if match.kind == :near && @near_match_policy == "leave"
 
         match
       end
 
-      def format_match_line(match)
+      def format_match_line(violation, match)
         token = match.token
-        ref = format_token_reference(token)
+        ref = format_token_reference(violation, token)
         defined_at = "#{token.file}:#{token.line}"
         if match.kind == :exact
           "  - **Suggested replacement:** Use `#{ref}` (matches token `#{token.name}` defined in `#{defined_at}`)."
@@ -125,12 +149,23 @@ module Guardrails
         end
       end
 
-      def format_token_reference(token)
+      def format_token_reference(violation, token)
         case token.syntax
         when :css_var then "var(--#{token.name})"
         when :scss_var then "$#{token.name}"
+        when :tailwind then tailwind_utility_for(violation, token)
         else token.name
         end
+      end
+
+      # Pulls the utility prefix out of the violation's snippet (e.g. `bg`
+      # from `class="bg-[#0066ff]"`) and joins it with the token name. Falls
+      # back to the bare token name when we can't recover the prefix.
+      def tailwind_utility_for(violation, token)
+        return token.name unless violation && violation.snippet
+
+        match = violation.snippet.match(/(\w[\w-]*)-\[#{Regexp.escape(violation.value)}\]/)
+        match ? "#{match[1]}-#{token.name}" : token.name
       end
     end
   end
