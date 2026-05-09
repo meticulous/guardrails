@@ -72,6 +72,25 @@ RSpec.describe Guardrails::Init::StackDetector do
       expect(described_class.new(root).detect.strategy).to eq(:scss_variables)
     end
 
+    it "prefers a token system over raw_hex even when raw_hex files outnumber it" do
+      # Patchvault-shaped: 17 SCSS-var files, 19 raw-hex-only files.
+      # The user has a token system; init should configure that, not raw_hex.
+      17.times do |i|
+        write_stylesheet "app/assets/stylesheets/_t#{i}.scss", "$x#{i}: #fa3;"
+      end
+      19.times do |i|
+        write_stylesheet "app/assets/stylesheets/_raw#{i}.scss", ".r#{i} { color: #f00; }"
+      end
+
+      expect(described_class.new(root).detect.strategy).to eq(:scss_variables)
+    end
+
+    it "picks raw_hex only when NO token system exists" do
+      write_stylesheet "app/assets/stylesheets/raw.css", ".x { color: #fa3; }"
+
+      expect(described_class.new(root).detect.strategy).to eq(:raw_hex)
+    end
+
     it "handles UTF-8 stylesheet content (em-dashes, smart quotes) without raising" do
       write_stylesheet "app/assets/stylesheets/_tokens.scss", <<~SCSS
         // Brand tokens — primary palette

@@ -72,15 +72,25 @@ module Guardrails
         evidence
       end
 
+      # Pick the dominant strategy by file count, but with a strong
+      # preference for actual token systems over raw_hex. If any token
+      # files exist (CSS custom properties or SCSS variables), choose
+      # whichever has more — even if raw_hex has more files than either.
+      # raw_hex only wins when no token system is present at all.
       def choose_strategy(evidence)
-        scores = {
-          css_custom_properties: evidence[:custom_property_files],
-          scss_variables: evidence[:scss_variable_files],
-          raw_hex: evidence[:raw_hex_files]
-        }
-        return :none if scores.values.all?(&:zero?)
+        css_count = evidence[:custom_property_files]
+        scss_count = evidence[:scss_variable_files]
+        hex_count = evidence[:raw_hex_files]
 
-        scores.max_by { |_, count| count }.first
+        return :none if css_count.zero? && scss_count.zero? && hex_count.zero?
+
+        # If any token system exists, pick the dominant one — never fall
+        # back to raw_hex when SCSS / CSS-vars are in play.
+        if css_count.positive? || scss_count.positive?
+          return css_count >= scss_count ? :css_custom_properties : :scss_variables
+        end
+
+        :raw_hex
       end
     end
   end
