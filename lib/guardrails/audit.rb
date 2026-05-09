@@ -90,12 +90,6 @@ module Guardrails
       Array(paths)
     end
 
-    def ignore_paths
-      # Returned for the audit config knob; the actual filter logic lives
-      # in `ignored?` because implicit and user ignores match differently.
-      IMPLICIT_IGNORE + Array(@config["ignore"] || [])
-    end
-
     def collect_files
       patterns = scan_paths.map { |p| File.join(p, "**/*.html.erb") }
       patterns
