@@ -6,7 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-05-05
+## [0.1.1] - 2026-05-09
+
+Patch release driven by dogfooding 0.1.0 against [Patchvault](https://github.com/jathayde/patchvault) — a 12-year-old Rails 8 app on Sprockets/Propshaft with no Tailwind. Surfaced and fixed five real issues.
+
+### Fixed
+
+- **`StackDetector` crashed on non-ASCII content.** `Pathname#read` uses the default external encoding (US-ASCII on some setups). Now forces `Encoding::UTF_8` like `Audit` / `Tokens` / `Icons` already did.
+- **HTML comments weren't masked before audit detectors ran**, so `<!--<p style="color: red">-->` flagged as `inline_style`. Both `Audit` and `A11yAudit` now strip `<!-- ... -->` first (preserving line/column positions) before scanning.
+- **Dead-icon detection only matched `#icon-NAME` sprite references**, reporting 100% of icons as "unused" on projects that use traditional `image_tag`/`asset_path`. Now also recognizes `image_tag "foo.svg"`, `asset_path("foo.svg")`, `image_path/url(...)`, and CSS `url(/icons/foo.svg)` references across views, components, stylesheets, and JS.
+- **Strategy detection ranked `raw_hex` over `scss_variables` / `css_custom_properties` on near-ties.** A project with 17 SCSS-variable files and 19 raw-hex files was setup as `raw_hex` and bailed on configuring `colors_file`. The rule now prefers any token system over `raw_hex` regardless of file counts; `raw_hex` only wins when no token usage exists at all.
+- **`Audit`, `StackDetector`, and `Tokens` now implicit-ignore `vendor/`, `node_modules/`, `tmp/`, `public/`, `log/` path components anywhere in the tree.** Scanners no longer pull in `app/assets/stylesheets/vendor/jquery-ui/_theme.css` and similar third-party noise. User-configured `audit.ignore` globs in `guardrails.yml` are additive.
+
+### Performance
+
+Full audit on a 496-ERB-file Rails repo runs in ~0.5s. Init / icons / tokens each finish in &lt;0.5s. Well under the PRD's 30-second target.
+
+[0.1.1]: https://github.com/meticulous/guardrails/releases/tag/v0.1.1
 
 Initial public release. Ships V0 + most of V1 from the [roadmap](doc/ROADMAP.md).
 
@@ -65,5 +81,5 @@ Initial public release. Ships V0 + most of V1 from the [roadmap](doc/ROADMAP.md)
 - [`doc/LOOKBOOK.md`](doc/LOOKBOOK.md) — Lookbook panel integration guide.
 - [`doc/A11Y.md`](doc/A11Y.md) — static a11y rules and the axe-core layering recipe for runtime coverage.
 
-[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.1.1...HEAD
 [0.1.0]: https://github.com/meticulous/guardrails/releases/tag/v0.1.0
