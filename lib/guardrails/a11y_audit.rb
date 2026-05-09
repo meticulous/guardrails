@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require_relative "erb_parser"
 
 module Guardrails
   # Static a11y checks that don't require a browser — element-level rules
@@ -19,16 +20,6 @@ module Guardrails
       "app/components/**/*.html.erb"
     ].freeze
 
-    ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
-    HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/
-
-    # Patterns that probe for the missing-attribute condition. Each tag
-    # opening must already be on a single line for the line/column to be
-    # meaningful.
-    IMG_PATTERN = /<img\b([^>]*)>/i
-    BUTTON_PATTERN = /<button\b([^>]*)>([\s\S]*?)<\/button>/i
-    LINK_PATTERN = /<a\b([^>]*)>([\s\S]*?)<\/a>/i
-    INPUT_PATTERN = /<input\b([^>]*)\/?>/i
     NON_INTERACTIVE_INPUT_TYPES = %w[hidden submit button reset image].freeze
 
     def initialize(root:, output: $stdout)
@@ -53,130 +44,183 @@ module Guardrails
 
     def scan_file(path)
       content = File.read(path, encoding: Encoding::UTF_8)
-      # Mask HTML comments first so `<!-- <button></button> -->` doesn't
-      # surface as a finding; then mask ERB so dynamic blocks don't either.
-      comments_masked = content.gsub(HTML_COMMENT_PATTERN) { |m| mask_chars(m) }
-      masked = comments_masked.gsub(ERB_BLOCK_PATTERN) { |m| mask_chars(m) }
       lines = content.lines
+      result = ErbParser.parse(content)
+      @current_document = result.document
+      @label_for_cache = nil
 
       findings = []
-      findings.concat(scan_img(masked, path, lines))
-      findings.concat(scan_button(masked, path, lines, content))
-      findings.concat(scan_link(masked, path, lines, content))
-      findings.concat(scan_input(masked, path, lines))
+      ErbParser.each_node(result.document) do |node|
+        case node
+        when ::Herb::AST::HTMLElementNode then findings.concat(check_element(node, path, lines))
+        when ::Herb::AST::HTMLOpenTagNode then findings.concat(check_void(node, path, lines)) if void_tag?(node)
+        end
+      end
       findings
+    ensure
+      @current_document = nil
+      @label_for_cache = nil
     end
 
-    def scan_img(content, file, lines)
-      results = []
-      content.scan(IMG_PATTERN) do
-        m = Regexp.last_match
-        attrs = m[1]
-        next if attribute_present?(attrs, "alt")
-
-        results << finding(:image_alt, m, file, lines)
+    def check_element(element, file, lines)
+      tag = element_tag_name(element)
+      case tag
+      when "button" then check_button(element, file, lines)
+      when "a" then check_link(element, file, lines)
+      else []
       end
-      results
     end
 
-    def scan_button(content, file, lines, original_content)
-      results = []
-      content.scan(BUTTON_PATTERN) do
-        m = Regexp.last_match
-        attrs = m[1]
-        body = m[2]
-        original_body = original_content[m.begin(2)...m.end(2)]
-        next if button_has_accessible_name?(attrs, body, original_body)
-
-        results << finding(:button_name, m, file, lines)
+    def check_void(open_tag, file, lines)
+      tag = open_tag_name(open_tag)
+      case tag
+      when "img" then check_img(open_tag, file, lines)
+      when "input" then check_input(open_tag, file, lines)
+      else []
       end
-      results
     end
 
-    def scan_link(content, file, lines, original_content)
-      results = []
-      content.scan(LINK_PATTERN) do
-        m = Regexp.last_match
-        attrs = m[1]
-        body = m[2]
-        original_body = original_content[m.begin(2)...m.end(2)]
-        next unless attribute_present?(attrs, "href")
-        next if link_has_accessible_name?(attrs, body, original_body)
+    def check_img(open_tag, file, lines)
+      return [] if attribute_present?(open_tag, "alt")
 
-        results << finding(:link_name, m, file, lines)
+      [build_finding(:image_alt, open_tag, file, lines)]
+    end
+
+    def check_button(element, file, lines)
+      attrs_node = element.open_tag
+      return [] if attribute_present?(attrs_node, "aria-label") || attribute_present?(attrs_node, "aria-labelledby")
+      # Defer to helper_recommended for ERB-output bodies — the suggestion
+      # there is more actionable than a generic missing-name flag.
+      return [] if body_contains_erb_output?(element)
+      return [] if visible_text_in(element).length.positive?
+
+      [build_finding(:button_name, attrs_node, file, lines)]
+    end
+
+    def check_link(element, file, lines)
+      attrs_node = element.open_tag
+      return [] unless attribute_present?(attrs_node, "href")
+      return [] if attribute_present?(attrs_node, "aria-label") || attribute_present?(attrs_node, "aria-labelledby")
+      return [] if attribute_present?(attrs_node, "title")
+      return [] if body_contains_erb_output?(element)
+      return [] if visible_text_in(element).length.positive?
+
+      [build_finding(:link_name, attrs_node, file, lines)]
+    end
+
+    def check_input(open_tag, file, lines)
+      type = (attribute_static_value(open_tag, "type") || "text").downcase
+      return [] if NON_INTERACTIVE_INPUT_TYPES.include?(type)
+      return [] if attribute_present?(open_tag, "aria-label") || attribute_present?(open_tag, "aria-labelledby")
+
+      id = attribute_static_value(open_tag, "id")
+      return [] if id && labeled_by_for?(id)
+
+      [build_finding(:input_label, open_tag, file, lines)]
+    end
+
+    def void_tag?(open_tag)
+      %w[img input].include?(open_tag_name(open_tag))
+    end
+
+    def open_tag_name(open_tag)
+      tok = open_tag.respond_to?(:tag_name) ? open_tag.tag_name : nil
+      tok && tok.respond_to?(:value) ? tok.value.to_s.downcase : nil
+    end
+
+    def element_tag_name(element)
+      open_tag_name(element.open_tag) if element.respond_to?(:open_tag) && element.open_tag
+    end
+
+    def attribute_nodes(open_tag)
+      ErbParser.compact_children(open_tag).select { |c| c.is_a?(::Herb::AST::HTMLAttributeNode) }
+    end
+
+    def attribute_present?(open_tag, name)
+      attribute_nodes(open_tag).any? { |attr| attribute_name(attr) == name.downcase }
+    end
+
+    def attribute_name(attr)
+      name_wrapper, _ = ErbParser.compact_children(attr)
+      return nil unless name_wrapper
+
+      lit = ErbParser.compact_children(name_wrapper).first
+      return nil unless lit && lit.respond_to?(:content)
+
+      lit.content.respond_to?(:value) ? lit.content.value.to_s.downcase : lit.content.to_s.downcase
+    end
+
+    def attribute_static_value(open_tag, name)
+      attr = attribute_nodes(open_tag).find { |a| attribute_name(a) == name.downcase }
+      return nil unless attr
+
+      _name_wrapper, value_wrapper = ErbParser.compact_children(attr)
+      return nil unless value_wrapper
+
+      ErbParser.compact_children(value_wrapper).filter_map do |child|
+        next unless child.is_a?(::Herb::AST::LiteralNode)
+
+        c = child.content
+        c.respond_to?(:value) ? c.value.to_s : c.to_s
+      end.join
+    end
+
+    def body_contains_erb_output?(element)
+      Array(element.respond_to?(:body) ? element.body : []).any? do |child|
+        next false unless child.is_a?(::Herb::AST::ERBContentNode)
+
+        opening = child.tag_opening
+        (opening.respond_to?(:value) ? opening.value : opening.to_s) == "<%="
       end
-      results
     end
 
-    def scan_input(content, file, lines)
-      results = []
-      content.scan(INPUT_PATTERN) do
-        m = Regexp.last_match
-        attrs = m[1]
-        type = attribute_value(attrs, "type") || "text"
-        next if NON_INTERACTIVE_INPUT_TYPES.include?(type.downcase)
-        next if attribute_present?(attrs, "aria-label") || attribute_present?(attrs, "aria-labelledby")
+    # Concatenated visible text content from descendant HTMLTextNodes.
+    # Skips ERB nodes (handled separately by body_contains_erb_output?)
+    # and nested element children.
+    def visible_text_in(element)
+      text = +""
+      ErbParser.each_node(element).each do |node|
+        next unless node.is_a?(::Herb::AST::HTMLTextNode)
 
-        id = attribute_value(attrs, "id")
-        next if id && content.include?(%(for="#{id}")) || (id && content.include?(%(for='#{id}')))
-
-        results << finding(:input_label, m, file, lines)
+        c = node.content
+        text << (c.respond_to?(:value) ? c.value.to_s : c.to_s)
       end
-      results
+      text.strip
     end
 
-    def attribute_present?(attrs, name)
-      attrs =~ /\b#{Regexp.escape(name)}\b/i
+    def labeled_by_for?(id)
+      # Looking for `<label for="id">` somewhere in the document. We
+      # don't have document-wide context here per element; the caller
+      # passes the file content via instance state. For now, fall back
+      # to a per-file scan one more time when needed.
+      @label_for_cache ||= collect_labels_for_ids
+      @label_for_cache.include?(id)
     end
 
-    def attribute_value(attrs, name)
-      m = attrs.match(/\b#{Regexp.escape(name)}\s*=\s*["']([^"']*)["']/i)
-      m ? m[1] : nil
+    # Walk the AST once per file to collect every `<label>` element's
+    # `for` attribute value into a Set. Cached for the duration of one
+    # file's scan_file call.
+    def collect_labels_for_ids
+      ids = []
+      ErbParser.each_node(@current_document) do |node|
+        next unless node.is_a?(::Herb::AST::HTMLElementNode)
+        next unless element_tag_name(node) == "label"
+
+        v = attribute_static_value(node.open_tag, "for")
+        ids << v if v
+      end
+      ids
     end
 
-    def button_has_accessible_name?(attrs, body, original_body)
-      return true if attribute_present?(attrs, "aria-label") || attribute_present?(attrs, "aria-labelledby")
-      # If the body wraps ERB output, defer to the helper_recommended
-      # detector — that case isn't an a11y bug, it's a Rails-idiom hint.
-      return true if has_erb_output?(original_body)
-
-      visible_text(body).length.positive?
-    end
-
-    def link_has_accessible_name?(attrs, body, original_body)
-      return true if attribute_present?(attrs, "aria-label") || attribute_present?(attrs, "aria-labelledby")
-      return true if attribute_present?(attrs, "title")
-      return true if has_erb_output?(original_body)
-
-      visible_text(body).length.positive?
-    end
-
-    # Matches only ERB *output* tags (`<%= %>`). Control flow (`<% if %>`,
-    # `<% end %>`) and comments (`<%# %>`) don't contribute renderable
-    # content and shouldn't suppress the a11y rule.
-    def has_erb_output?(body)
-      body.match?(/<%=[\s\S]*?%>/)
-    end
-
-    def visible_text(body)
-      body.gsub(/<[^>]+>/, "").strip
-    end
-
-    def finding(rule, match, file, lines)
-      offset = match.begin(0)
-      line_num = match.pre_match.count("\n") + 1
-      column = offset - (match.pre_match.rindex("\n") || -1)
+    def build_finding(rule, node, file, lines)
+      line, column = ErbParser.start_position(node)
       Finding.new(
         rule: rule,
         file: file.relative_path_from(@root).to_s,
-        line: line_num,
+        line: line,
         column: column,
-        snippet: lines[line_num - 1]&.chomp&.strip
+        snippet: lines[line - 1]&.chomp&.strip
       )
-    end
-
-    def mask_chars(string)
-      string.gsub(/[^\n]/, " ")
     end
 
     def print_report(findings)
