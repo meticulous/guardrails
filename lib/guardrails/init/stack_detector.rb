@@ -55,7 +55,11 @@ module Guardrails
         evidence[:files_scanned] = files.length
 
         files.each do |file|
-          content = file.read
+          # Force UTF-8 — real-world stylesheets routinely contain
+          # multi-byte chars (em-dashes in comments, smart quotes in
+          # string values, etc.) and Pathname#read uses the default
+          # external encoding which can be US-ASCII on some systems.
+          content = File.read(file, encoding: Encoding::UTF_8)
           has_custom_props = content.match?(CUSTOM_PROPERTY_PATTERN)
           has_scss_vars = content.match?(SCSS_VARIABLE_PATTERN)
           has_hex = content.match?(HEX_LITERAL_PATTERN)

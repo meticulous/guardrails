@@ -72,6 +72,17 @@ RSpec.describe Guardrails::Init::StackDetector do
       expect(described_class.new(root).detect.strategy).to eq(:scss_variables)
     end
 
+    it "handles UTF-8 stylesheet content (em-dashes, smart quotes) without raising" do
+      write_stylesheet "app/assets/stylesheets/_tokens.scss", <<~SCSS
+        // Brand tokens — primary palette
+        $primary: #0066ff;
+        $secondary: #fa3;
+      SCSS
+
+      expect { described_class.new(root).detect }.not_to raise_error
+      expect(described_class.new(root).detect.strategy).to eq(:scss_variables)
+    end
+
     it "scans the tailwind asset directory" do
       write_stylesheet "app/assets/tailwind/application.css", <<~CSS
         @theme {
