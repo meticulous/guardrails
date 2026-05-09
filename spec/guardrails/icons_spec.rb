@@ -219,5 +219,37 @@ RSpec.describe Guardrails::Icons do
 
       expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
     end
+
+    it "matches Rails image_tag references (foo.svg / foo.png)" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<%= image_tag "check.svg", alt: "Check" %>'
+
+      expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
+    end
+
+    it "matches asset_path / image_path references" do
+      write_svg "app/assets/images/icons/logo.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<img src="<%= asset_path("logo.svg") %>">'
+
+      expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
+    end
+
+    it "matches CSS url() references in stylesheets" do
+      write_svg "app/assets/images/icons/bg.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      relative_path = root.join("app/assets/stylesheets/_hero.scss")
+      relative_path.dirname.mkpath
+      relative_path.write('.hero { background: url("/icons/bg.svg") no-repeat; }')
+
+      expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
+    end
+
+    it "still flags genuinely unused icons that aren't referenced anywhere" do
+      write_svg "app/assets/images/icons/used.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_svg "app/assets/images/icons/orphan.svg", '<svg viewBox="0 0 24 24"><path d="M1 1"/></svg>'
+      write_view "app/views/a.html.erb", '<%= image_tag "used.svg" %>'
+
+      report = described_class.new(root: root, output: StringIO.new).report_dead_icons
+      expect(report[:dead]).to eq(["orphan"])
+    end
   end
 end
