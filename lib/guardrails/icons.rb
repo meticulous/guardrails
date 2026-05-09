@@ -26,13 +26,18 @@ module Guardrails
     # side — false negatives (saying "alive" when actually dead) just
     # leave dead icons in source; false positives (saying "dead" when
     # actually used) cause the user to delete files they need.
+    #
+    # Each pattern allows an optional directory prefix before the basename
+    # (e.g. `image_tag "icons/check.svg"` for files under
+    # `app/assets/images/icons/`) and captures only the bare name so it
+    # matches against icons collected from disk.
     USAGE_PATTERNS = [
       # Sprite reference: <use href="#icon-foo">
       /#icon-([\w-]+)/,
-      # Rails image_tag "foo.svg" / image_tag('foo.png')
-      /\bimage_tag\s*\(?\s*["']([\w-]+)\.(?:svg|png|gif|jpe?g|webp)["']/,
-      # Rails asset_path / asset_url / image_path / image_url
-      /\b(?:asset_path|asset_url|image_path|image_url)\s*\(?\s*["']([\w-]+)\.(?:svg|png|gif|jpe?g|webp)["']/,
+      # Rails image_tag "foo.svg" / image_tag "icons/foo.svg"
+      /\bimage_tag\s*\(?\s*["'](?:[^"']*\/)?([\w-]+)\.(?:svg|png|gif|jpe?g|webp)["']/,
+      # Rails asset_path / asset_url / image_path / image_url with optional path
+      /\b(?:asset_path|asset_url|image_path|image_url)\s*\(?\s*["'](?:[^"']*\/)?([\w-]+)\.(?:svg|png|gif|jpe?g|webp)["']/,
       # CSS url() references in stylesheets and inline style attributes
       /url\s*\(\s*["']?(?:[^"')]*\/)?([\w-]+)\.(?:svg|png|gif|jpe?g|webp)/i
     ].freeze

@@ -220,16 +220,23 @@ RSpec.describe Guardrails::Icons do
       expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
     end
 
-    it "matches Rails image_tag references (foo.svg / foo.png)" do
+    it "matches Rails image_tag references (bare filename)" do
       write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
       write_view "app/views/a.html.erb", '<%= image_tag "check.svg", alt: "Check" %>'
 
       expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
     end
 
-    it "matches asset_path / image_path references" do
+    it "matches Rails image_tag with a directory-qualified path" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<%= image_tag "icons/check.svg", alt: "Check" %>'
+
+      expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
+    end
+
+    it "matches asset_path / image_path references with directory-qualified path" do
       write_svg "app/assets/images/icons/logo.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
-      write_view "app/views/a.html.erb", '<img src="<%= asset_path("logo.svg") %>">'
+      write_view "app/views/a.html.erb", '<img src="<%= asset_path("icons/logo.svg") %>">'
 
       expect(described_class.new(root: root, output: StringIO.new).report_dead_icons[:dead]).to be_empty
     end
