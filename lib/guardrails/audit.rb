@@ -12,6 +12,13 @@ module Guardrails
     DEFAULT_SCAN_PATHS = ["app/views", "app/components"].freeze
     SCAN_PATTERNS = DEFAULT_SCAN_PATHS.map { |p| "#{p}/**/*.html.erb" }.freeze
 
+    # Subtrees that should never be scanned even if they happen to contain
+    # ERB. These are merged with any user-supplied ignore globs from
+    # guardrails.yml (in addition, not in place of). Vendor / node_modules
+    # / tmp / public regularly contain third-party code that nobody wants
+    # to "fix" through this lens.
+    IMPLICIT_IGNORE = %w[vendor node_modules tmp public log].freeze
+
     INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
     HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/
@@ -84,7 +91,9 @@ module Guardrails
     end
 
     def ignore_paths
-      Array(@config["ignore"] || [])
+      # Returned for the audit config knob; the actual filter logic lives
+      # in `ignored?` because implicit and user ignores match differently.
+      IMPLICIT_IGNORE + Array(@config["ignore"] || [])
     end
 
     def collect_files
@@ -98,7 +107,15 @@ module Guardrails
 
     def ignored?(path)
       relative = path.relative_path_from(@root).to_s
-      ignore_paths.any? do |ignore|
+      segments = relative.split("/")
+
+      # Implicit ignores match on any path component — `vendor` blocks
+      # both top-level `vendor/foo` and nested `app/assets/stylesheets/
+      # vendor/foo`. User-configured ignores keep the original prefix
+      # semantics so they can name specific subtrees.
+      return true if (IMPLICIT_IGNORE & segments).any?
+
+      Array(@config["ignore"] || []).any? do |ignore|
         relative == ignore || relative.start_with?("#{ignore}/")
       end
     end

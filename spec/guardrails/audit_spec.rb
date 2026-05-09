@@ -426,6 +426,26 @@ RSpec.describe Guardrails::Audit do
 
       expect(run_audit.length).to eq(2)
     end
+
+    it "skips vendor/ paths anywhere in the tree by default" do
+      # User points scan_paths at a tree that happens to contain vendor/.
+      configure("scan_paths" => ["lib/templates"])
+      write_view "lib/templates/vendor/legacy/index.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "lib/templates/real.html.erb", '<svg fill="#0066ff"></svg>'
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.file).to eq("lib/templates/real.html.erb")
+    end
+
+    it "skips node_modules / tmp / public / log even when nested inside scan paths" do
+      write_view "app/views/welcome.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "app/views/tmp/cached.html.erb", '<svg fill="#0066ff"></svg>'
+      write_view "app/views/node_modules/x.html.erb", '<svg fill="#0066ff"></svg>'
+
+      violations = run_audit
+      expect(violations.map(&:file)).to eq(["app/views/welcome.html.erb"])
+    end
   end
 
   describe "report output" do

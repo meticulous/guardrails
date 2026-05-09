@@ -12,6 +12,11 @@ module Guardrails
         "app/assets/tailwind/**/*.css"
       ].freeze
 
+      # Skip third-party / generated subtrees even when they're nested
+      # inside an `app/assets/stylesheets/` tree (common Sprockets
+      # convention). Match on path components, not prefix.
+      IMPLICIT_IGNORE_SEGMENTS = %w[vendor node_modules tmp public log].freeze
+
       CUSTOM_PROPERTY_PATTERN = /--[a-z][\w-]*:\s*[^;]+;/
       SCSS_VARIABLE_PATTERN = /^\s*\$[a-z][\w-]*:/
       HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
@@ -39,6 +44,12 @@ module Guardrails
           .flat_map { |pattern| Dir.glob(@root.join(pattern)) }
           .map { |path| Pathname(path) }
           .uniq
+          .reject { |path| ignored_segment?(path) }
+      end
+
+      def ignored_segment?(path)
+        segments = path.relative_path_from(@root).to_s.split("/")
+        (IMPLICIT_IGNORE_SEGMENTS & segments).any?
       end
 
       def empty_evidence

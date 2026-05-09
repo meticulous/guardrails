@@ -20,6 +20,11 @@ module Guardrails
       "app/assets/tailwind/**/*.css"
     ].freeze
 
+    # Same path-component skip-list as Audit / StackDetector — vendor
+    # stylesheets nested under app/assets/stylesheets/ shouldn't surface
+    # as drift since they're typically third-party.
+    IMPLICIT_IGNORE_SEGMENTS = %w[vendor node_modules tmp public log].freeze
+
     def initialize(root:, output: $stdout)
       @root = Pathname(root)
       @output = output
@@ -139,6 +144,12 @@ module Guardrails
         .flat_map { |pattern| Dir.glob(@root.join(pattern)) }
         .map { |path| Pathname(path) }
         .uniq
+        .reject { |path| ignored_segment?(path) }
+    end
+
+    def ignored_segment?(path)
+      segments = path.relative_path_from(@root).to_s.split("/")
+      (IMPLICIT_IGNORE_SEGMENTS & segments).any?
     end
 
     def variable_definition_line?(line)

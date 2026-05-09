@@ -213,6 +213,14 @@ RSpec.describe Guardrails::Tokens do
       expect(detect).to be_empty
     end
 
+    it "skips vendor/ subtrees nested inside app/assets/stylesheets" do
+      configure(colors_file: "tokens.scss")
+      write_file "tokens.scss", "$primary: #0066ff;"
+      write_file "app/assets/stylesheets/vendor/legacy.scss", ".x { color: #abcdef; }"
+
+      expect(detect).to be_empty
+    end
+
     it "matches stylesheet drift against tailwind.config.js theme colors" do
       configure(colors_file: "tokens.scss")
       write_file "tokens.scss", "$other: #abcdef;"
