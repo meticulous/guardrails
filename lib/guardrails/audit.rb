@@ -122,17 +122,11 @@ module Guardrails
     def scan_file(file)
       content = File.read(file, encoding: Encoding::UTF_8)
       original_lines = content.lines
-      # Tailwind_arbitrary still runs through the regex pipeline (HTML
-      # comments and ERB blocks masked first to preserve line/column).
-      # All other detectors are AST-based via Herb.
-      masked = mask(content, HTML_COMMENT_PATTERN)
-      masked_no_erb = mask(masked, ERB_BLOCK_PATTERN)
-
       ast_result = ErbParser.parse(content)
 
-      detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
-        detect_inline_styles_ast(ast_result, file, original_lines) +
+      detect_inline_styles_ast(ast_result, file, original_lines) +
         detect_raw_color_literals_ast(ast_result, file, original_lines) +
+        detect_tailwind_arbitrary_ast(ast_result, file, original_lines) +
         detect_helper_recommended_ast(ast_result, file, original_lines)
     end
 
@@ -315,32 +309,38 @@ module Guardrails
       end
     end
 
-    def detect_tailwind_arbitrary(content, file, original_lines)
-      violations = []
-      content.each_line.with_index do |line, idx|
-        [CLASS_ATTRIBUTE_DOUBLE, CLASS_ATTRIBUTE_SINGLE].each do |attr_pattern|
-          line.scan(attr_pattern) do
-            outer = Regexp.last_match
-            class_value = outer[1]
-            value_start = outer.begin(1)
+    # AST-based tailwind_arbitrary detector. Walks element class
+    # attributes and flags any `[...]` arbitrary value found in the
+    # static portion of the class string. ERB-driven class fragments
+    # don't contribute static text, so dynamic class names don't
+    # false-flag.
+    def detect_tailwind_arbitrary_ast(parse_result, file, original_lines)
+      results = []
+      ErbParser.each_node(parse_result.document) do |element|
+        next unless element.is_a?(::Herb::AST::HTMLElementNode)
 
-            class_value.scan(ARBITRARY_VALUE_PATTERN) do
-              offset = Regexp.last_match.begin(0)
-              bracket_match = Regexp.last_match[0]
-              inner_value = bracket_match[1..-2] # strip [ and ]
-              violations << Violation.new(
-                type: :tailwind_arbitrary,
-                file: relative(file),
-                line: idx + 1,
-                column: value_start + offset + 1,
-                snippet: snippet(original_lines, idx),
-                value: inner_value
-              )
-            end
+        attribute_nodes(element).each do |attr|
+          next unless attribute_name(attr) == "class"
+
+          static = static_attribute_value(attr)
+          next if static.nil? || static.empty?
+
+          static.scan(ARBITRARY_VALUE_PATTERN) do |_|
+            md = Regexp.last_match
+            inner_value = md[0][1..-2] # strip [ and ]
+            line, value_start_col = attribute_value_start(attr, original_lines)
+            results << Violation.new(
+              type: :tailwind_arbitrary,
+              file: relative(file),
+              line: line,
+              column: value_start_col + md.begin(0),
+              snippet: snippet(original_lines, line - 1),
+              value: inner_value
+            )
           end
         end
       end
-      violations
+      results
     end
 
     def scan_lines(content, pattern)
