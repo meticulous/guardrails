@@ -163,6 +163,32 @@ RSpec.describe Guardrails::Audit do
       expect(violations.length).to eq(1)
       expect(violations.first.type).to eq(:raw_color)
     end
+
+    it "does not flag commented-out markup" do
+      write_view "app/views/x.html.erb", '<!--<svg fill="#0066ff"></svg>-->'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag inline styles inside HTML comments" do
+      write_view "app/views/x.html.erb", '<!--<p style="color: red">old code</p>-->'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag tailwind arbitrary values inside HTML comments" do
+      write_view "app/views/x.html.erb", '<!--<div class="bg-[#fa3]">old</div>-->'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "still flags real violations on a line that also contains a comment" do
+      write_view "app/views/x.html.erb", '<svg fill="#0066ff"></svg><!-- old: <svg fill="#fa3"></svg> -->'
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.value).to eq("#0066ff")
+    end
   end
 
   describe "tailwind arbitrary value detection" do

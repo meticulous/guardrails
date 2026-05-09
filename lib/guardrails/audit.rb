@@ -14,6 +14,7 @@ module Guardrails
 
     INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
+    HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
     RGB_LITERAL_PATTERN = /\brgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)/
     CLASS_ATTRIBUTE_DOUBLE = /\bclass\s*=\s*"([^"]*)"/
@@ -105,12 +106,16 @@ module Guardrails
     def scan_file(file)
       content = File.read(file, encoding: Encoding::UTF_8)
       original_lines = content.lines
-      masked_no_erb = mask(content, ERB_BLOCK_PATTERN)
+      # Mask HTML comments first so commented-out markup doesn't trip
+      # detectors. Then mask ERB blocks. Both masks preserve line and
+      # column positions.
+      masked = mask(content, HTML_COMMENT_PATTERN)
+      masked_no_erb = mask(masked, ERB_BLOCK_PATTERN)
 
       detect_inline_styles(masked_no_erb, file, original_lines) +
         detect_raw_color_literals(masked_no_erb, file, original_lines) +
         detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
-        detect_helper_recommended(content, file, original_lines)
+        detect_helper_recommended(masked, file, original_lines)
     end
 
     def detect_inline_styles(content, file, original_lines)

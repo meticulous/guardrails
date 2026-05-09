@@ -20,6 +20,7 @@ module Guardrails
     ].freeze
 
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
+    HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/
 
     # Patterns that probe for the missing-attribute condition. Each tag
     # opening must already be on a single line for the line/column to be
@@ -52,7 +53,10 @@ module Guardrails
 
     def scan_file(path)
       content = File.read(path, encoding: Encoding::UTF_8)
-      masked = content.gsub(ERB_BLOCK_PATTERN) { |m| mask_chars(m) }
+      # Mask HTML comments first so `<!-- <button></button> -->` doesn't
+      # surface as a finding; then mask ERB so dynamic blocks don't either.
+      comments_masked = content.gsub(HTML_COMMENT_PATTERN) { |m| mask_chars(m) }
+      masked = comments_masked.gsub(ERB_BLOCK_PATTERN) { |m| mask_chars(m) }
       lines = content.lines
 
       findings = []
