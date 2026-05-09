@@ -2,6 +2,7 @@
 
 require "pathname"
 require "set"
+require_relative "erb_parser"
 
 module Guardrails
   class PartialSimilarity
@@ -18,9 +19,6 @@ module Guardrails
       "app/components/**/_*.html.erb",
       "app/components/**/*_component.html.erb"
     ].freeze
-
-    HTML_TAG_PATTERN = /<\/?\s*([a-zA-Z][\w-]*)\b[^>]*>/
-    ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
 
     def initialize(root:, output: $stdout, threshold: DEFAULT_THRESHOLD, ngram_size: DEFAULT_NGRAM_SIZE)
       @root = Pathname(root)
@@ -59,9 +57,54 @@ module Guardrails
       findings.sort_by { |f| -f.score }
     end
 
+    # Tokenize a partial into a flat sequence of HTML tag names by walking
+    # the parsed AST. Traversal is open-tag → recurse-into-body → close-tag
+    # so the resulting sequence preserves source order:
+    #
+    #   <div><span></span></div>  →  ["div", "span", "span", "div"]
+    #
+    # ERB nodes don't contribute tokens. Void elements (img, input)
+    # produce one token; their close-tag pass is skipped.
     def tokenize(content)
-      masked = content.gsub(ERB_BLOCK_PATTERN, "")
-      masked.scan(HTML_TAG_PATTERN).flatten.map(&:downcase)
+      tokens = []
+      result = ErbParser.parse(content)
+      walk_for_tokens(result.document, tokens)
+      tokens
+    end
+
+    def walk_for_tokens(node, tokens)
+      case node
+      when ::Herb::AST::HTMLElementNode
+        name = element_tag_name(node)
+        if name
+          tokens << name
+          Array(node.body).each { |child| walk_for_tokens(child, tokens) }
+          tokens << name unless void_element_name?(name)
+        end
+      when ::Herb::AST::HTMLOpenTagNode
+        # Top-level void element not wrapped in HTMLElementNode.
+        name = open_tag_name(node)
+        tokens << name if name && void_element_name?(name)
+      else
+        ErbParser.compact_children(node).each { |child| walk_for_tokens(child, tokens) }
+      end
+    end
+
+    VOID_ELEMENT_NAMES = %w[
+      area base br col embed hr img input link meta param source track wbr
+    ].to_set.freeze
+
+    def void_element_name?(name)
+      VOID_ELEMENT_NAMES.include?(name)
+    end
+
+    def open_tag_name(node)
+      tok = node.respond_to?(:tag_name) ? node.tag_name : nil
+      tok && tok.respond_to?(:value) ? tok.value.to_s.downcase : nil
+    end
+
+    def element_tag_name(element)
+      open_tag_name(element.open_tag) if element.respond_to?(:open_tag) && element.open_tag
     end
 
     private
