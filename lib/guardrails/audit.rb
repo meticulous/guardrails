@@ -24,27 +24,27 @@ module Guardrails
     # NOT interpreted as shell globs.
     IMPLICIT_IGNORE = %w[vendor node_modules tmp public log].freeze
 
-    INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
-    ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
-    HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/
+    # Color literal patterns — applied to the static portion of an
+    # attribute value extracted via the AST.
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
     RGB_LITERAL_PATTERN = /\brgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)/
-    CLASS_ATTRIBUTE_DOUBLE = /\bclass\s*=\s*"([^"]*)"/
-    CLASS_ATTRIBUTE_SINGLE = /\bclass\s*=\s*'([^']*)'/
+
+    # Tailwind arbitrary-value bracket pattern — applied to the static
+    # portion of a class attribute value.
     ARBITRARY_VALUE_PATTERN = /\[[^\]]+\]/
 
-    # Elements where wrapping ERB output in literal HTML obscures static
-    # analysis (the body looks empty after ERB masking). Mapped to the
-    # Rails helper that handles the same case more cleanly.
+    # Pattern used only to recover the on-disk `style="..."` snippet for
+    # the inline_style violation's `value` field. Detection itself is
+    # AST-based; this is just for nicer reporting.
+    INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
+
+    # Elements where wrapping ERB output in literal HTML hides intent
+    # from static analysis. Mapped to the Rails helper that does the
+    # same job with attributes (including aria-*) centralized.
     HELPER_RECOMMENDED_TAGS = {
       "button" => "tag.button(label, ...) or button_to(label, path) for forms",
       "a" => "link_to(label, path, ...)"
     }.freeze
-    # Match only ERB *output* tags (`<%= %>`), not control flow (`<% if %>`)
-    # or comments (`<%# %>`). The helper-recommendation rule is about
-    # rendering dynamic text inside a literal element, not about any ERB
-    # presence in the body.
-    ERB_OUTPUT_PATTERN = /<%=[\s\S]*?%>/
 
     # Attributes whose values legitimately carry color literals. Scoping
     # raw_color detection to these keeps href="#section" or data-id="abc"
@@ -53,14 +53,6 @@ module Guardrails
       fill stroke color bgcolor background
       flood-color lighting-color stop-color
     ].freeze
-    COLOR_ATTRIBUTE_PATTERN = Regexp.union(
-      [
-        /\b(?:#{COLOR_ATTRIBUTE_NAMES.join('|')})\s*=\s*"([^"]*)"/i,
-        /\b(?:#{COLOR_ATTRIBUTE_NAMES.join('|')})\s*=\s*'([^']*)'/i,
-        /\bdata-[\w-]*colou?r[\w-]*\s*=\s*"([^"]*)"/i,
-        /\bdata-[\w-]*colou?r[\w-]*\s*=\s*'([^']*)'/i
-      ]
-    )
 
     def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false)
       @root = Pathname(root)
@@ -341,37 +333,6 @@ module Guardrails
         end
       end
       results
-    end
-
-    def scan_lines(content, pattern)
-      violations = []
-      content.each_line.with_index do |line, idx|
-        line.scan(pattern) do
-          m = Regexp.last_match
-          column = m.begin(0) + 1
-          violation = yield(idx, column, line, m[0])
-          violations << violation if violation
-        end
-      end
-      violations
-    end
-
-    def inside_quoted_attribute?(line, position)
-      before = line[0...position]
-      before.count('"').odd? || before.count("'").odd?
-    end
-
-    def mask(content, pattern)
-      content.gsub(pattern) { |match| mask_chars(match) }
-    end
-
-    # Replace every non-newline character with a space, leaving newlines
-    # in their original positions. The earlier "newlines first, spaces
-    # after" implementation kept the total length right but shifted line
-    # breaks, which made line/column reports for content AFTER a
-    # multi-line masked region land on the wrong line.
-    def mask_chars(string)
-      string.gsub(/[^\n]/, " ")
     end
 
     def relative(file)
