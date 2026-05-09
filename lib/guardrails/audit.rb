@@ -12,8 +12,20 @@ module Guardrails
     DEFAULT_SCAN_PATHS = ["app/views", "app/components"].freeze
     SCAN_PATTERNS = DEFAULT_SCAN_PATHS.map { |p| "#{p}/**/*.html.erb" }.freeze
 
+    # Subtrees that should never be scanned even if they happen to contain
+    # ERB. These are merged with any user-supplied ignore paths from
+    # guardrails.yml (in addition, not in place of). Vendor / node_modules
+    # / tmp / public regularly contain third-party code that nobody wants
+    # to "fix" through this lens.
+    #
+    # Note: `audit.ignore` entries are matched as exact paths or directory
+    # prefixes (e.g. "app/views/layouts" excludes that subtree); they are
+    # NOT interpreted as shell globs.
+    IMPLICIT_IGNORE = %w[vendor node_modules tmp public log].freeze
+
     INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
+    HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
     RGB_LITERAL_PATTERN = /\brgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)/
     CLASS_ATTRIBUTE_DOUBLE = /\bclass\s*=\s*"([^"]*)"/
@@ -82,10 +94,6 @@ module Guardrails
       Array(paths)
     end
 
-    def ignore_paths
-      Array(@config["ignore"] || [])
-    end
-
     def collect_files
       patterns = scan_paths.map { |p| File.join(p, "**/*.html.erb") }
       patterns
@@ -97,7 +105,15 @@ module Guardrails
 
     def ignored?(path)
       relative = path.relative_path_from(@root).to_s
-      ignore_paths.any? do |ignore|
+      segments = relative.split("/")
+
+      # Implicit ignores match on any path component — `vendor` blocks
+      # both top-level `vendor/foo` and nested `app/assets/stylesheets/
+      # vendor/foo`. User-configured ignores keep the original prefix
+      # semantics so they can name specific subtrees.
+      return true if (IMPLICIT_IGNORE & segments).any?
+
+      Array(@config["ignore"] || []).any? do |ignore|
         relative == ignore || relative.start_with?("#{ignore}/")
       end
     end
@@ -105,12 +121,16 @@ module Guardrails
     def scan_file(file)
       content = File.read(file, encoding: Encoding::UTF_8)
       original_lines = content.lines
-      masked_no_erb = mask(content, ERB_BLOCK_PATTERN)
+      # Mask HTML comments first so commented-out markup doesn't trip
+      # detectors. Then mask ERB blocks. Both masks preserve line and
+      # column positions.
+      masked = mask(content, HTML_COMMENT_PATTERN)
+      masked_no_erb = mask(masked, ERB_BLOCK_PATTERN)
 
       detect_inline_styles(masked_no_erb, file, original_lines) +
         detect_raw_color_literals(masked_no_erb, file, original_lines) +
         detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
-        detect_helper_recommended(content, file, original_lines)
+        detect_helper_recommended(masked, file, original_lines)
     end
 
     def detect_inline_styles(content, file, original_lines)
@@ -236,9 +256,13 @@ module Guardrails
       content.gsub(pattern) { |match| mask_chars(match) }
     end
 
+    # Replace every non-newline character with a space, leaving newlines
+    # in their original positions. The earlier "newlines first, spaces
+    # after" implementation kept the total length right but shifted line
+    # breaks, which made line/column reports for content AFTER a
+    # multi-line masked region land on the wrong line.
     def mask_chars(string)
-      newline_count = string.count("\n")
-      "\n" * newline_count + " " * (string.length - newline_count)
+      string.gsub(/[^\n]/, " ")
     end
 
     def relative(file)

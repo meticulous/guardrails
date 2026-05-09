@@ -21,7 +21,34 @@ module Guardrails
     SVG_BLOCK_PATTERN = /<svg\b[^>]*>[\s\S]*?<\/svg>/m
     VIEWBOX_ATTR = /\bviewBox\s*=\s*["']([^"']+)["']/i
     ERB_BLOCK_PATTERN = /<%[\s\S]*?%>/
-    ICON_REFERENCE_PATTERN = /#icon-([\w-]+)/
+
+    # Patterns that indicate an icon is in use. We're conservative on this
+    # side — false negatives (saying "alive" when actually dead) just
+    # leave dead icons in source; false positives (saying "dead" when
+    # actually used) cause the user to delete files they need.
+    #
+    # Each pattern allows an optional directory prefix before the basename
+    # (e.g. `image_tag "icons/check.svg"` for files under
+    # `app/assets/images/icons/`) and captures only the bare name so it
+    # matches against icons collected from disk.
+    USAGE_PATTERNS = [
+      # Sprite reference: <use href="#icon-foo">
+      /#icon-([\w-]+)/,
+      # Rails image_tag "foo.svg" / image_tag "icons/foo.svg"
+      /\bimage_tag\s*\(?\s*["'](?:[^"']*\/)?([\w-]+)\.(?:svg|png|gif|jpe?g|webp)["']/,
+      # Rails asset_path / asset_url / image_path / image_url with optional path
+      /\b(?:asset_path|asset_url|image_path|image_url)\s*\(?\s*["'](?:[^"']*\/)?([\w-]+)\.(?:svg|png|gif|jpe?g|webp)["']/,
+      # CSS url() references in stylesheets and inline style attributes
+      /url\s*\(\s*["']?(?:[^"')]*\/)?([\w-]+)\.(?:svg|png|gif|jpe?g|webp)/i
+    ].freeze
+
+    USAGE_SCAN_PATTERNS = [
+      "app/views/**/*.html.erb",
+      "app/components/**/*.html.erb",
+      "app/components/**/*.rb",
+      "app/assets/stylesheets/**/*.{css,scss,sass}",
+      "app/javascript/**/*.{js,ts,jsx,tsx}"
+    ].freeze
 
     def initialize(root:, output: $stdout, source: nil, sprite_output: nil)
       @root = Pathname(root)
@@ -164,10 +191,17 @@ module Guardrails
     end
 
     def collect_used_icon_names
-      view_files.flat_map do |file|
+      usage_files.flat_map do |file|
         content = File.read(file, encoding: Encoding::UTF_8)
-        content.scan(ICON_REFERENCE_PATTERN).flatten
+        USAGE_PATTERNS.flat_map { |pattern| content.scan(pattern).flatten }
       end.uniq
+    end
+
+    def usage_files
+      USAGE_SCAN_PATTERNS
+        .flat_map { |pattern| Dir.glob(@root.join(pattern)) }
+        .map { |path| Pathname(path) }
+        .uniq
     end
 
     def print_dead_report(report)
@@ -180,7 +214,7 @@ module Guardrails
       end
       unless report[:unknown].empty?
         @output.puts "Guardrails icons: #{report[:unknown].length} reference#{'s' if report[:unknown].length != 1} to icons not in source"
-        report[:unknown].each { |name| @output.puts "  - #icon-#{name}" }
+        report[:unknown].each { |name| @output.puts "  - #{name}" }
       end
     end
 
