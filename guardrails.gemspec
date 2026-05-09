@@ -24,6 +24,11 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "railties", ">= 7.1"
+  # Herb is a parser for HTML+ERB that exposes a real AST. Replaces the
+  # regex-and-masking pipeline in 0.2.0+; far more accurate for detectors
+  # that need to know "is this static text vs ERB output" or "what
+  # attributes does this element have".
+  spec.add_dependency "herb", ">= 0.10"
 
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.13"

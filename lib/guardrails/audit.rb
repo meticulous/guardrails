@@ -4,6 +4,7 @@ require "pathname"
 require "set"
 require "stringio"
 require "yaml"
+require_relative "erb_parser"
 
 module Guardrails
   class Audit
@@ -123,14 +124,17 @@ module Guardrails
       original_lines = content.lines
       # Mask HTML comments first so commented-out markup doesn't trip
       # detectors. Then mask ERB blocks. Both masks preserve line and
-      # column positions.
+      # column positions. (Used by the regex detectors that haven't yet
+      # been migrated to the AST pipeline.)
       masked = mask(content, HTML_COMMENT_PATTERN)
       masked_no_erb = mask(masked, ERB_BLOCK_PATTERN)
+
+      ast_result = ErbParser.parse(content)
 
       detect_inline_styles(masked_no_erb, file, original_lines) +
         detect_raw_color_literals(masked_no_erb, file, original_lines) +
         detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
-        detect_helper_recommended(masked, file, original_lines)
+        detect_helper_recommended_ast(ast_result, file, original_lines)
     end
 
     def detect_inline_styles(content, file, original_lines)
@@ -176,34 +180,73 @@ module Guardrails
       violations
     end
 
-    def detect_helper_recommended(content, file, original_lines)
+    # AST-based helper_recommended detector. Walks the parsed document
+    # for HTMLElementNodes whose tag matches HELPER_RECOMMENDED_TAGS, and
+    # flags ones that wrap an `<%=` ERB output (control flow `<% %>` and
+    # `<%# %>` comments are excluded — they're distinguished by the
+    # ERBContentNode#tag_opening value, not by guessing in regex).
+    def detect_helper_recommended_ast(parse_result, file, original_lines)
       results = []
-      HELPER_RECOMMENDED_TAGS.each_key do |tag|
-        pattern = /<#{tag}\b([^>]*)>([\s\S]*?)<\/#{tag}>/m
-        content.scan(pattern) do
-          m = Regexp.last_match
-          attrs = m[1]
-          body = m[2]
-          next unless body.match?(ERB_OUTPUT_PATTERN)
-          # Suggesting link_to for an <a> without href would be wrong —
-          # named anchors and JS-only hooks aren't navigation.
-          next if tag == "a" && !attrs.match?(/\bhref\b/i)
+      ErbParser.each_node(parse_result.document) do |node|
+        next unless node.is_a?(::Herb::AST::HTMLElementNode)
 
-          offset = m.begin(0)
-          line_num = m.pre_match.count("\n") + 1
-          col_base = m.pre_match.rindex("\n")
-          column = col_base ? offset - col_base : offset + 1
-          results << Violation.new(
-            type: :helper_recommended,
-            file: relative(file),
-            line: line_num,
-            column: column,
-            snippet: snippet(original_lines, line_num - 1),
-            value: tag
-          )
-        end
+        tag = element_tag_name(node)
+        next unless HELPER_RECOMMENDED_TAGS.key?(tag)
+        next if tag == "a" && !element_has_attribute?(node, "href")
+        next unless body_contains_erb_output?(node)
+
+        line, column = ErbParser.start_position(node)
+        results << Violation.new(
+          type: :helper_recommended,
+          file: relative(file),
+          line: line,
+          column: column,
+          snippet: snippet(original_lines, line - 1),
+          value: tag
+        )
       end
       results
+    end
+
+    # HTMLElementNode#tag_name returns a Herb::Token; `.value` is the
+    # raw string ("button", "a", etc).
+    def element_tag_name(element)
+      return nil unless element.respond_to?(:tag_name) && element.tag_name
+
+      element.tag_name.respond_to?(:value) ? element.tag_name.value.to_s.downcase : nil
+    end
+
+    def element_has_attribute?(element, name)
+      return false unless element.respond_to?(:open_tag) && element.open_tag
+
+      attribute_nodes(element).any? { |attr| attribute_name(attr) == name.downcase }
+    end
+
+    def attribute_nodes(element)
+      open_children = ErbParser.compact_children(element.open_tag)
+      open_children.select { |child| child.is_a?(::Herb::AST::HTMLAttributeNode) }
+    end
+
+    # HTMLAttributeNode wraps a HTMLAttributeNameNode → LiteralNode chain.
+    # The literal's `content` is the attribute name as a Herb::Token.
+    def attribute_name(attribute_node)
+      name_wrapper, _value_wrapper = ErbParser.compact_children(attribute_node)
+      return nil unless name_wrapper
+
+      literal = ErbParser.compact_children(name_wrapper).first
+      return nil unless literal && literal.respond_to?(:content)
+
+      literal.content.respond_to?(:value) ? literal.content.value.to_s.downcase : literal.content.to_s.downcase
+    end
+
+    def body_contains_erb_output?(element)
+      body_nodes = element.respond_to?(:body) ? Array(element.body) : []
+      body_nodes.any? do |child|
+        next false unless child.is_a?(::Herb::AST::ERBContentNode)
+
+        opening = child.tag_opening
+        opening.respond_to?(:value) ? opening.value == "<%=" : opening.to_s == "<%="
+      end
     end
 
     def detect_tailwind_arbitrary(content, file, original_lines)
