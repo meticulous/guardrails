@@ -13,10 +13,14 @@ module Guardrails
     SCAN_PATTERNS = DEFAULT_SCAN_PATHS.map { |p| "#{p}/**/*.html.erb" }.freeze
 
     # Subtrees that should never be scanned even if they happen to contain
-    # ERB. These are merged with any user-supplied ignore globs from
+    # ERB. These are merged with any user-supplied ignore paths from
     # guardrails.yml (in addition, not in place of). Vendor / node_modules
     # / tmp / public regularly contain third-party code that nobody wants
     # to "fix" through this lens.
+    #
+    # Note: `audit.ignore` entries are matched as exact paths or directory
+    # prefixes (e.g. "app/views/layouts" excludes that subtree); they are
+    # NOT interpreted as shell globs.
     IMPLICIT_IGNORE = %w[vendor node_modules tmp public log].freeze
 
     INLINE_STYLE_PATTERN = /\bstyle\s*=\s*["'][^"']+["']/

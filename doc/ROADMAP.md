@@ -56,7 +56,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. PR #1 ha
 | Stack detection (CSS-vars / SCSS / raw-hex) | ✅ shipped | |
 | `guardrails.yml` writing with sensible defaults | ✅ shipped | |
 | `prefers-color-scheme` + `prefers-contrast` MQ scaffolding | ✅ shipped | Skipped if ConfigWriter refuses to overwrite |
-| Interactive prompts (TTY) | ✅ shipped | near_match_policy / near_match_threshold / scan_paths / ignore globs. CI-safe non-TTY fallback to defaults. Skipped entirely when config exists and FORCE=1 isn't set |
+| Interactive prompts (TTY) | ✅ shipped | near_match_policy / near_match_threshold / scan_paths / ignore paths (matched as exact paths or directory prefixes — not shell globs). CI-safe non-TTY fallback to defaults. Skipped entirely when config exists and FORCE=1 isn't set |
 | Refuse-overwrite by default | ✅ shipped | |
 | `FORCE=1` to overwrite + re-scaffold MQs | ✅ shipped | |
 

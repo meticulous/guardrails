@@ -70,7 +70,7 @@ module Guardrails
           default: DEFAULT_SCAN_PATHS.join(",")
         )),
         ignore: csv(prompter.ask(
-          "Audit ignore globs (comma-separated):",
+          "Audit ignore paths (comma-separated; matched as path prefixes, not globs):",
           default: DEFAULT_IGNORE.join(",")
         ))
       }
