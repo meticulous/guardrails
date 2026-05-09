@@ -176,8 +176,7 @@ module Guardrails
     end
 
     def mask_chars(string)
-      newline_count = string.count("\n")
-      "\n" * newline_count + " " * (string.length - newline_count)
+      string.gsub(/[^\n]/, " ")
     end
 
     def print_report(findings)

@@ -189,6 +189,36 @@ RSpec.describe Guardrails::Audit do
       expect(violations.length).to eq(1)
       expect(violations.first.value).to eq("#0066ff")
     end
+
+    it "reports correct line numbers for content after a multi-line masked comment" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <p>line 1</p>
+        <!--
+          old markup
+          more lines
+        -->
+        <svg fill="#0066ff"></svg>
+      ERB
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.line).to eq(6)
+    end
+
+    it "reports correct line numbers for content after a multi-line ERB block" do
+      write_view "app/views/x.html.erb", <<~ERB
+        <%
+          ruby_code_one
+          ruby_code_two
+          ruby_code_three
+        %>
+        <svg fill="#0066ff"></svg>
+      ERB
+
+      violations = run_audit
+      expect(violations.length).to eq(1)
+      expect(violations.first.line).to eq(6)
+    end
   end
 
   describe "tailwind arbitrary value detection" do

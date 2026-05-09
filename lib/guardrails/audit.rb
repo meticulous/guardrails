@@ -258,9 +258,13 @@ module Guardrails
       content.gsub(pattern) { |match| mask_chars(match) }
     end
 
+    # Replace every non-newline character with a space, leaving newlines
+    # in their original positions. The earlier "newlines first, spaces
+    # after" implementation kept the total length right but shifted line
+    # breaks, which made line/column reports for content AFTER a
+    # multi-line masked region land on the wrong line.
     def mask_chars(string)
-      newline_count = string.count("\n")
-      "\n" * newline_count + " " * (string.length - newline_count)
+      string.gsub(/[^\n]/, " ")
     end
 
     def relative(file)
