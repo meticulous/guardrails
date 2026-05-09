@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-09
+
+Foundation upgrade — every audit detector now walks a real ERB AST via the [Herb](https://herb-tools.dev) parser instead of regex-scanning masked source. Behavior preserved across the existing test corpus (325/325 pass) with edge-case false positives eliminated.
+
+### Added
+
+- **Hard runtime dependency on `herb >= 0.10`.** Brings a proper HTML+ERB parser (the same parser the Rails team adopted in 2025) into Guardrails as the foundation for static analysis.
+- **`Guardrails::ErbParser` module** — thin wrapper around `Herb.parse`. Exposes `parse(source)`, `each_node(node)`, `compact_children(node)`, and `start_position(node)` so detectors get a stable interface and parse failures degrade gracefully.
+
+### Changed
+
+Every detector that previously regex-masked source now walks the AST:
+
+- **`inline_style`** — flags any `HTMLAttributeNode` whose name is `style`. No more dependence on `/\bstyle\s*=/` regex matching.
+- **`raw_color`** — iterates each element's attributes, filters to color-bearing names (fill, stroke, color, bgcolor, background, flood/lighting/stop-color, plus `data-*color*` / `data-*colour*`), and scans only the static portion of the attribute value. Mixed values like `fill="<%= shade %>"` no longer false-flag.
+- **`tailwind_arbitrary`** — walks `class` attributes and finds `[...]` patterns in their static text. Variant chains and dynamic class fragments handled cleanly.
+- **`helper_recommended`** — checks `ERBContentNode#tag_opening` directly to distinguish `<%=` (output) from `<%` (control flow) and `<%#` (comments). The `<a>` href gate uses real attribute iteration.
+- **`A11yAudit` (image_alt, button_name, link_name, input_label)** — now AST-driven. Multi-line elements parse exactly. The label-for lookup walks the document once per file and caches matched ids. The deferred-to-helper_recommended logic checks for actual `<%=` ERBContentNode children, not regex matches.
+- **`PartialSimilarity` tokenizer** — emits tag tokens via AST traversal (open-tag → recurse body → close-tag) so the source-order shape matches the previous regex tokenizer. Void elements (img, input, br, etc.) produce one token, not two. Same Jaccard math, more accurate input.
+
+### Removed
+
+- `mask`, `mask_chars`, `scan_lines`, `inside_quoted_attribute?` — masking-pipeline helpers no longer needed.
+- `ERB_BLOCK_PATTERN`, `HTML_COMMENT_PATTERN`, `ERB_OUTPUT_PATTERN`, `CLASS_ATTRIBUTE_DOUBLE`, `CLASS_ATTRIBUTE_SINGLE`, `COLOR_ATTRIBUTE_PATTERN` — pattern constants that drove the old scan flow. Surviving regexes (`HEX_LITERAL_PATTERN`, `RGB_LITERAL_PATTERN`, `ARBITRARY_VALUE_PATTERN`, `INLINE_STYLE_PATTERN`) operate on already-scoped strings extracted via the AST, not on raw file content.
+
+### Fixed (real false-positive cases the AST handles cleanly)
+
+- Multi-line HTML comments containing inline styles no longer false-flag (`<!--<p style="...">...</p>-->` spanning many lines).
+- ERB output strings containing markup-shaped content (`<%= "<button></button>" %>`) no longer surface as bogus elements.
+- Attribute values containing `>` or quotes are tokenized correctly.
+- Patchvault audit count: 83 → 82 (one false-positive multi-line commented-out style); a11y count: 48 → 47 (one regex edge case).
+
+### Migration notes
+
+No public API changes. `guardrails.yml` config keys are unchanged. CLI / rake task surface is identical. Existing tests pass without modification. If you've been pinning `guardrails ~> 0.1`, update to `~> 0.2`.
+
+[0.2.0]: https://github.com/meticulous/guardrails/releases/tag/v0.2.0
+
 ## [0.1.1] - 2026-05-09
 
 Patch release driven by dogfooding 0.1.0 against [Patchvault](https://github.com/jathayde/patchvault) — a 12-year-old Rails 8 app on Sprockets/Propshaft with no Tailwind. Surfaced and fixed five real issues.
@@ -81,5 +119,5 @@ Initial public release. Ships V0 + most of V1 from the [roadmap](doc/ROADMAP.md)
 - [`doc/LOOKBOOK.md`](doc/LOOKBOOK.md) — Lookbook panel integration guide.
 - [`doc/A11Y.md`](doc/A11Y.md) — static a11y rules and the axe-core layering recipe for runtime coverage.
 
-[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.0...HEAD
 [0.1.0]: https://github.com/meticulous/guardrails/releases/tag/v0.1.0
