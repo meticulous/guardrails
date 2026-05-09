@@ -122,62 +122,128 @@ module Guardrails
     def scan_file(file)
       content = File.read(file, encoding: Encoding::UTF_8)
       original_lines = content.lines
-      # Mask HTML comments first so commented-out markup doesn't trip
-      # detectors. Then mask ERB blocks. Both masks preserve line and
-      # column positions. (Used by the regex detectors that haven't yet
-      # been migrated to the AST pipeline.)
+      # Tailwind_arbitrary still runs through the regex pipeline (HTML
+      # comments and ERB blocks masked first to preserve line/column).
+      # All other detectors are AST-based via Herb.
       masked = mask(content, HTML_COMMENT_PATTERN)
       masked_no_erb = mask(masked, ERB_BLOCK_PATTERN)
 
       ast_result = ErbParser.parse(content)
 
-      detect_inline_styles(masked_no_erb, file, original_lines) +
-        detect_raw_color_literals(masked_no_erb, file, original_lines) +
-        detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
+      detect_tailwind_arbitrary(masked_no_erb, file, original_lines) +
+        detect_inline_styles_ast(ast_result, file, original_lines) +
+        detect_raw_color_literals_ast(ast_result, file, original_lines) +
         detect_helper_recommended_ast(ast_result, file, original_lines)
     end
 
-    def detect_inline_styles(content, file, original_lines)
-      scan_lines(content, INLINE_STYLE_PATTERN) do |idx, column, _line, match_text|
-        Violation.new(
-          type: :inline_style,
-          file: relative(file),
-          line: idx + 1,
-          column: column,
-          snippet: snippet(original_lines, idx),
-          value: match_text
-        )
+    # AST-based inline_style detector. Walks the parsed document for
+    # HTMLElementNodes carrying a `style` attribute and emits one
+    # violation per such attribute.
+    def detect_inline_styles_ast(parse_result, file, original_lines)
+      results = []
+      ErbParser.each_node(parse_result.document) do |element|
+        next unless element.is_a?(::Herb::AST::HTMLElementNode)
+
+        attribute_nodes(element).each do |attr|
+          next unless attribute_name(attr) == "style"
+
+          line, column = ErbParser.start_position(attr)
+          results << Violation.new(
+            type: :inline_style,
+            file: relative(file),
+            line: line,
+            column: column,
+            snippet: snippet(original_lines, line - 1),
+            value: inline_style_text_at(original_lines, line, column)
+          )
+        end
       end
+      results
     end
 
-    def detect_raw_color_literals(content, file, original_lines)
-      violations = []
-      content.each_line.with_index do |line, idx|
-        line.scan(COLOR_ATTRIBUTE_PATTERN) do
-          outer = Regexp.last_match
-          attr_value = outer.captures.compact.first
-          next if attr_value.nil? || attr_value.empty?
+    # AST-based raw_color detector. Scans color-bearing attribute values
+    # for hex/rgb literals — but only the *static* portion of the value.
+    # Mixed values like `fill="<%= shade %>"` produce no static text
+    # against the literal pattern, so dynamic values don't false-flag.
+    def detect_raw_color_literals_ast(parse_result, file, original_lines)
+      results = []
+      ErbParser.each_node(parse_result.document) do |element|
+        next unless element.is_a?(::Herb::AST::HTMLElementNode)
 
-          # The captured group's start position may be in any of the union's
-          # alternatives — find whichever one matched.
-          value_start = (1..outer.captures.length).map { |i| outer.begin(i) }.compact.first
+        attribute_nodes(element).each do |attr|
+          name = attribute_name(attr)
+          next unless color_bearing_attribute?(name)
+
+          static = static_attribute_value(attr)
+          next if static.nil? || static.empty?
 
           [HEX_LITERAL_PATTERN, RGB_LITERAL_PATTERN].each do |pattern|
-            attr_value.scan(pattern) do
-              inner = Regexp.last_match
-              violations << Violation.new(
+            static.scan(pattern) do |_|
+              md = Regexp.last_match
+              line, value_start_col = attribute_value_start(attr, original_lines)
+              results << Violation.new(
                 type: :raw_color,
                 file: relative(file),
-                line: idx + 1,
-                column: value_start + inner.begin(0) + 1,
-                snippet: snippet(original_lines, idx),
-                value: inner[0]
+                line: line,
+                column: value_start_col + md.begin(0),
+                snippet: snippet(original_lines, line - 1),
+                value: md[0]
               )
             end
           end
         end
       end
-      violations
+      results
+    end
+
+    COLOR_ATTRIBUTE_NAME_SET = COLOR_ATTRIBUTE_NAMES.map(&:downcase).to_set.freeze
+    DATA_COLOR_ATTRIBUTE_PATTERN = /\Adata-[\w-]*colou?r[\w-]*\z/i
+
+    def color_bearing_attribute?(name)
+      return false if name.nil?
+
+      COLOR_ATTRIBUTE_NAME_SET.include?(name) || name.match?(DATA_COLOR_ATTRIBUTE_PATTERN)
+    end
+
+    # Concatenate the literal portions of an attribute value. ERB-driven
+    # parts are skipped — we can't statically know what they'll render.
+    def static_attribute_value(attribute_node)
+      _name_wrapper, value_wrapper = ErbParser.compact_children(attribute_node)
+      return nil unless value_wrapper
+
+      ErbParser.compact_children(value_wrapper).filter_map do |child|
+        next unless child.is_a?(::Herb::AST::LiteralNode)
+
+        literal_string(child)
+      end.join
+    end
+
+    def literal_string(literal_node)
+      content = literal_node.content
+      content.respond_to?(:value) ? content.value.to_s : content.to_s
+    end
+
+    # Returns [line, column] for the first character of the attribute
+    # *value* text — past any opening quote. Used so raw_color violations
+    # report the column where the hex literal actually starts in source.
+    def attribute_value_start(attribute_node, original_lines)
+      _name_wrapper, value_wrapper = ErbParser.compact_children(attribute_node)
+      return ErbParser.start_position(attribute_node) unless value_wrapper
+
+      line, col = ErbParser.start_position(value_wrapper)
+      line_text = original_lines[line - 1] || ""
+      first_char = line_text[col - 1]
+      col += 1 if first_char == '"' || first_char == "'"
+      [line, col]
+    end
+
+    # Recover the on-disk `style="..."` snippet for the violation's
+    # `value` field — Herb doesn't surface raw attribute source.
+    def inline_style_text_at(original_lines, line, column)
+      line_text = original_lines[line - 1] || ""
+      tail = line_text[(column - 1)..] || ""
+      match = tail.match(INLINE_STYLE_PATTERN)
+      match ? match[0] : tail.split(/\s/, 2).first.to_s
     end
 
     # AST-based helper_recommended detector. Walks the parsed document
