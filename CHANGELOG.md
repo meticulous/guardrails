@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-10
+
+Patch release driven by dogfooding 0.2.0 against [Talos](https://github.com/Knightsbridge/talos) — a 12-year Rails 8 app mid-port to ViewComponent (807 ERB files, 33 components, no Tailwind). Two specific false-positive patterns surfaced; both fixed.
+
+### Fixed
+
+- **`helper_recommended` no longer fires on elements that already declare `aria-label` or `aria-labelledby`.** The pattern in the wild is icon buttons (`<button aria-label="Search"><%= render IconComponent.new %></button>`) where accessibility is explicitly handled on the literal tag and the suggestion to switch to `tag.button(label, ...)` is just idiom noise. 16 of 44 findings on Talos were this exact case.
+- **Audit auto-ignores `*_mailer/` view directories.** Email clients require inline styles, so flagging mailer views as design-system drift is incorrect by design. The new `IMPLICIT_IGNORE_PATTERNS` regex list matches `\A\w+_mailer\z` against any path component, alongside the existing literal `IMPLICIT_IGNORE` set (vendor / node_modules / tmp / public / log). 24 of 109 inline_style findings on Talos were in mailer views.
+
+### Verified against Talos
+
+| Metric | 0.2.0 | 0.2.1 |
+|---|---|---|
+| Audit total | 153 | 117 (−36) |
+| inline_style | 109 | 86 (−23) |
+| helper_recommended | 44 | 31 (−13) |
+| a11y total | 59 | 56 (−3) |
+| Stimulus / similarity / VC findings | unchanged | unchanged |
+
+[0.2.1]: https://github.com/meticulous/guardrails/releases/tag/v0.2.1
+
 ## [0.2.0] - 2026-05-09
 
 Foundation upgrade — every audit detector now walks a real ERB AST via the [Herb](https://herb-tools.dev) parser instead of regex-scanning masked source. Behavior preserved across the existing test corpus (325/325 pass) with edge-case false positives eliminated.
@@ -119,5 +140,5 @@ Initial public release. Ships V0 + most of V1 from the [roadmap](doc/ROADMAP.md)
 - [`doc/LOOKBOOK.md`](doc/LOOKBOOK.md) — Lookbook panel integration guide.
 - [`doc/A11Y.md`](doc/A11Y.md) — static a11y rules and the axe-core layering recipe for runtime coverage.
 
-[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.1...HEAD
 [0.1.0]: https://github.com/meticulous/guardrails/releases/tag/v0.1.0

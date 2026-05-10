@@ -387,6 +387,24 @@ RSpec.describe Guardrails::Audit do
       expect(run_audit.map(&:type)).to eq([:helper_recommended])
     end
 
+    it "does not flag <button aria-label> wrapping ERB output (a11y handled, idiom is fine)" do
+      write_view "app/views/x.html.erb", '<button aria-label="Search"><%= render IconComponent.new %></button>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag <a href aria-label> wrapping ERB output" do
+      write_view "app/views/x.html.erb", '<a href="/x" aria-label="Open"><%= render IconComponent.new %></a>'
+
+      expect(run_audit).to be_empty
+    end
+
+    it "does not flag <button aria-labelledby> wrapping ERB output" do
+      write_view "app/views/x.html.erb", '<button aria-labelledby="heading"><%= label %></button>'
+
+      expect(run_audit).to be_empty
+    end
+
     it "captures the line of the opening tag for multi-line elements" do
       write_view "app/views/x.html.erb", <<~ERB
         <h1>Title</h1>
@@ -487,6 +505,25 @@ RSpec.describe Guardrails::Audit do
 
       violations = run_audit
       expect(violations.map(&:file)).to eq(["app/views/welcome.html.erb"])
+    end
+
+    it "implicit-ignores *_mailer view directories (email markup needs inline styles)" do
+      write_view "app/views/welcome.html.erb", '<p style="color: red">x</p>'
+      write_view "app/views/contact_mailer/new_message.html.erb", '<p style="color: red">x</p>'
+      write_view "app/views/billing_mailer/invoice.html.erb", '<p style="color: red">x</p>'
+      write_view "app/views/morning_brief_mailer/digest.html.erb", '<p style="color: red">x</p>'
+
+      violations = run_audit
+      expect(violations.map(&:file)).to eq(["app/views/welcome.html.erb"])
+    end
+
+    it "does not match `mailer` (without underscore) or other lookalikes as mailer dirs" do
+      write_view "app/views/mailer/x.html.erb", '<p style="color: red">x</p>'
+      write_view "app/views/_mailer_partial/x.html.erb", '<p style="color: red">x</p>'
+
+      # `mailer` (no prefix) and `_mailer_partial` shouldn't match the
+      # `*_mailer` regex; both should be scanned normally.
+      expect(run_audit.length).to eq(2)
     end
   end
 
