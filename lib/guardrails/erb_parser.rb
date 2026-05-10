@@ -24,16 +24,40 @@ module Guardrails
 
     module_function
 
-    # Parse ERB source text. Returns a Result regardless of parse success;
-    # callers can check #success? if they care about strictness.
+    # Parse ERB source text. Returns a Result regardless of parse success
+    # — Herb crashes or value-less results both degrade to a safe
+    # empty-document Result so callers can always traverse `result.document`
+    # without nil-checking. Callers that care about strictness should check
+    # `result.success?` and inspect `result.errors`.
     def parse(source)
       herb_result = Herb.parse(source)
-      Result.new(
-        document: herb_result.value,
-        errors: herb_result.errors,
-        source: source
-      )
+      document = herb_result.value
+      if document.nil?
+        empty_result(source, ["herb returned no document for source"])
+      else
+        Result.new(
+          document: document,
+          errors: Array(herb_result.errors),
+          source: source
+        )
+      end
+    rescue StandardError => e
+      empty_result(source, ["#{e.class}: #{e.message}"])
     end
+
+    # Build a Result around an empty parsed document so detectors that
+    # walk `result.document` see no elements rather than crashing.
+    def empty_result(source, errors)
+      empty = Herb.parse("")
+      Result.new(document: empty.value, errors: Array(errors), source: source)
+    rescue StandardError
+      # If Herb can't even parse "", give back a Result whose document
+      # responds to compact_child_nodes with []. Use a Struct-as-stub.
+      Result.new(document: NULL_DOCUMENT, errors: Array(errors), source: source)
+    end
+
+    NULL_DOCUMENT = Struct.new(:compact_child_nodes, :children, :location).new([], [], nil)
+    private_constant :NULL_DOCUMENT
 
     # Walk an AST node depth-first, yielding each descendant (including
     # the root). Callers filter by `node.class` or `node.tag_name`.
