@@ -165,13 +165,25 @@ module Guardrails
       end.join
     end
 
+    # Walks the element's body subtree (including nested elements) for
+    # `<%=` ERB output. Descendant-aware so that
+    # `<button><span><%= label %></span></button>` is recognized as
+    # wrapping ERB output and defers to helper_recommended — same
+    # behavior the previous regex provided.
     def body_contains_erb_output?(element)
-      Array(element.respond_to?(:body) ? element.body : []).any? do |child|
-        next false unless child.is_a?(::Herb::AST::ERBContentNode)
+      body_nodes = Array(element.respond_to?(:body) ? element.body : [])
+      body_nodes.any? { |child| descendant_has_erb_output?(child) }
+    end
 
-        opening = child.tag_opening
-        (opening.respond_to?(:value) ? opening.value : opening.to_s) == "<%="
+    def descendant_has_erb_output?(node)
+      return false if node.nil?
+
+      if node.is_a?(::Herb::AST::ERBContentNode)
+        opening = node.tag_opening
+        return (opening.respond_to?(:value) ? opening.value : opening.to_s) == "<%="
       end
+
+      ErbParser.compact_children(node).any? { |child| descendant_has_erb_output?(child) }
     end
 
     # Concatenated visible text content from descendant HTMLTextNodes.

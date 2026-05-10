@@ -291,14 +291,26 @@ module Guardrails
       literal.content.respond_to?(:value) ? literal.content.value.to_s.downcase : literal.content.to_s.downcase
     end
 
+    # Walks the element's body subtree (including nested elements)
+    # looking for any `<%=` ERB output. The previous regex scanned the
+    # whole body string, so deeply-nested cases like
+    # `<button><span><%= label %></span></button>` registered too —
+    # preserving that behavior matters because the helper-recommendation
+    # is exactly as relevant when the dynamic content is one level down.
     def body_contains_erb_output?(element)
       body_nodes = element.respond_to?(:body) ? Array(element.body) : []
-      body_nodes.any? do |child|
-        next false unless child.is_a?(::Herb::AST::ERBContentNode)
+      body_nodes.any? { |child| descendant_has_erb_output?(child) }
+    end
 
-        opening = child.tag_opening
-        opening.respond_to?(:value) ? opening.value == "<%=" : opening.to_s == "<%="
+    def descendant_has_erb_output?(node)
+      return false if node.nil?
+
+      if node.is_a?(::Herb::AST::ERBContentNode)
+        opening = node.tag_opening
+        return opening.respond_to?(:value) ? opening.value == "<%=" : opening.to_s == "<%="
       end
+
+      ErbParser.compact_children(node).any? { |child| descendant_has_erb_output?(child) }
     end
 
     # AST-based tailwind_arbitrary detector. Walks element class
