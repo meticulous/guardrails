@@ -199,6 +199,79 @@ RSpec.describe Guardrails::PartialSimilarity do
     end
   end
 
+  describe "#group_findings" do
+    let(:audit) { described_class.new(root: root, output: StringIO.new) }
+
+    def finding(a, b, score: 1.0)
+      Guardrails::PartialSimilarity::Finding.new(
+        file_a: a, file_b: b, score: score, tag_count_a: 6, tag_count_b: 6
+      )
+    end
+
+    it "collapses a clique of N pairwise-similar files into one group" do
+      # 4 files all pairwise similar = C(4,2) = 6 pairs, should collapse to 1 group
+      pairs = [
+        finding("a.html.erb", "b.html.erb"),
+        finding("a.html.erb", "c.html.erb"),
+        finding("a.html.erb", "d.html.erb"),
+        finding("b.html.erb", "c.html.erb"),
+        finding("b.html.erb", "d.html.erb"),
+        finding("c.html.erb", "d.html.erb")
+      ]
+
+      groups = audit.group_findings(pairs)
+      expect(groups.length).to eq(1)
+      expect(groups.first[:files]).to eq(%w[a.html.erb b.html.erb c.html.erb d.html.erb])
+      expect(groups.first[:pair_count]).to eq(6)
+    end
+
+    it "keeps unrelated pairs separate" do
+      pairs = [
+        finding("a.html.erb", "b.html.erb"),
+        finding("c.html.erb", "d.html.erb")
+      ]
+
+      groups = audit.group_findings(pairs)
+      expect(groups.length).to eq(2)
+      expect(groups.map { |g| g[:files] }).to contain_exactly(
+        %w[a.html.erb b.html.erb],
+        %w[c.html.erb d.html.erb]
+      )
+    end
+
+    it "captures score range within a mixed-score component" do
+      pairs = [
+        finding("a.html.erb", "b.html.erb", score: 1.0),
+        finding("a.html.erb", "c.html.erb", score: 0.85),
+        finding("b.html.erb", "c.html.erb", score: 0.92)
+      ]
+
+      groups = audit.group_findings(pairs)
+      expect(groups.first[:score_min]).to eq(0.85)
+      expect(groups.first[:score_max]).to eq(1.0)
+    end
+
+    it "sorts groups by size (largest first)" do
+      pairs = [
+        finding("a.html.erb", "b.html.erb"),
+        finding("c.html.erb", "d.html.erb"),
+        finding("c.html.erb", "e.html.erb"),
+        finding("d.html.erb", "e.html.erb")
+      ]
+
+      groups = audit.group_findings(pairs)
+      expect(groups.first[:files].length).to eq(3)
+      expect(groups.last[:files].length).to eq(2)
+    end
+
+    it "exposes a sample_pair Finding for downstream rendering" do
+      pair = finding("a.html.erb", "b.html.erb")
+      groups = audit.group_findings([pair])
+
+      expect(groups.first[:sample_pair]).to eq(pair)
+    end
+  end
+
   describe "report output" do
     it "is silent when there are no findings" do
       output = StringIO.new
@@ -215,9 +288,33 @@ RSpec.describe Guardrails::PartialSimilarity do
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("similar pair")
+      expect(output.string).to include("similar group")
       expect(output.string).to include("_a.html.erb")
       expect(output.string).to include("_b.html.erb")
+    end
+
+    it "prints a single 'Group of N' line when many partials are pairwise similar" do
+      structure = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
+      4.times { |i| write_partial "app/views/_t#{i}.html.erb", structure }
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("Group of 4 templates")
+      expect(output.string).to include("6 pairs") # C(4,2)
+    end
+
+    it "preserves tag-count suffix for size-2 (single-pair) groups" do
+      structure_a = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
+      structure_b = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
+      write_partial "app/views/_a.html.erb", structure_a
+      write_partial "app/views/_b.html.erb", structure_b
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      # Original pair format includes the tag-count suffix
+      expect(output.string).to match(/_a\.html\.erb ↔ .+_b\.html\.erb\s+\(\d+ \/ \d+ tags\)/)
     end
   end
 end

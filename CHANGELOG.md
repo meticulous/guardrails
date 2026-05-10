@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-10
+
+UX patch — two report-clarity fixes following the Talos dogfood. No detection-logic changes.
+
+### Changed
+
+- **`PartialSimilarity` collapses pairwise findings into connected-component groups.** When 8 templated partials are all pairwise similar (e.g. the `public_activity` engine pattern), the report previously emitted C(8,2) = 28 noisy pair lines. It now emits one "Group of 8 templates" entry with the full file list and observed score range. The raw pair count is still reported in the header. On Talos this drops the visible output from 313 pair lines to 57 groups across 199 files — 5.5× reduction in noise. Single pairs (size-2 components) keep the original `file_a ↔ file_b` format.
+- **`Tokens` error message names the missing config key and points at remediation.** When `guardrails.yml` references a `colors_file` / `type_scale_file` that doesn't exist on disk, the message now identifies the specific YAML key and suggests "Edit guardrails.yml to point at your real token file, or set FORCE=1 and re-run guardrails:init."
+
+### Added
+
+- `PartialSimilarity#group_findings` — exposed publicly so external tooling can consume the structured group form (returns `{ files:, score_min:, score_max:, pair_count: }` per component).
+
+[0.2.2]: https://github.com/meticulous/guardrails/releases/tag/v0.2.2
+
 ## [0.2.1] - 2026-05-10
 
 Patch release driven by dogfooding 0.2.0 against [Talos](https://github.com/Knightsbridge/talos) — a 12-year Rails 8 app mid-port to ViewComponent (807 ERB files, 33 components, no Tailwind). Two specific false-positive patterns surfaced; both fixed.
@@ -140,5 +155,5 @@ Initial public release. Ships V0 + most of V1 from the [roadmap](doc/ROADMAP.md)
 - [`doc/LOOKBOOK.md`](doc/LOOKBOOK.md) — Lookbook panel integration guide.
 - [`doc/A11Y.md`](doc/A11Y.md) — static a11y rules and the axe-core layering recipe for runtime coverage.
 
-[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.2...HEAD
 [0.1.0]: https://github.com/meticulous/guardrails/releases/tag/v0.1.0
