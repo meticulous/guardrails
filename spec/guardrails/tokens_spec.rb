@@ -301,6 +301,32 @@ RSpec.describe Guardrails::Tokens do
       expect(output.string).not_to match(/^\s*\$primary =/)
     end
 
+    it "hints about preset-style tailwind configs producing zero tokens" do
+      # Avo-shaped: preset import means the parser can't reach theme.colors
+      write_file "tailwind.config.js", <<~JS
+        const preset = require('./tailwind.preset.js')
+        module.exports = { presets: [preset], content: preset.content }
+      JS
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("0 tokens found in tailwind.config.js")
+      expect(output.string).to include("uses a `presets:` import")
+      expect(output.string).to include("@theme")
+    end
+
+    it "does NOT show the preset hint when the literal config does parse tokens" do
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).not_to include("presets:")
+    end
+
     it "names which config key was missing and points at remediation" do
       configure(colors_file: "missing/_colors.scss")
       output = StringIO.new
