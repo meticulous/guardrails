@@ -154,9 +154,12 @@ RSpec.describe Guardrails::CrossCodebasePatterns do
       expect(b_occ.line).to eq(3)
     end
 
-    it "reports nested shapes alongside their containing shapes" do
-      # A "card" containing an "actions" block. Both should be detected
-      # as separate patterns if they repeat enough.
+    it "reports the outer shape only when an inner shape is fully contained by it" do
+      # A "card" containing an "actions" block. The outer
+      # `article(h1, div(a,a,a))` dominates the inner `div(a,a,a)` —
+      # both have the same occurrence count and live in the same files,
+      # so the inner is dropped as redundant. The outer is what a
+      # refactor would extract; the inner is just a substring of it.
       view = <<~ERB
         <article>
           <h1></h1>
@@ -166,9 +169,40 @@ RSpec.describe Guardrails::CrossCodebasePatterns do
       4.times { |i| write_view "app/views/page#{i}.html.erb", view }
 
       patterns = run_patterns(min_size: 4)
-      # article(h1, div(a,a,a)) and div(a,a,a) both qualify
-      sizes = patterns.map(&:size).sort
-      expect(sizes).to include(6) # article + h1 + div + 3 a
+      expect(patterns.map(&:size)).to eq([6]) # article + h1 + div + 3 a only
+    end
+
+    it "keeps an inner shape when it appears in more places than the outer" do
+      # `div(a,a,a)` appears 6 times: 4 inside `article(...)` and 2
+      # standalone. Counts differ (outer=4, inner=6), so dedupe leaves
+      # both — the inner is a legitimately distinct refactor candidate.
+      with_article = <<~ERB
+        <article>
+          <h1></h1>
+          <div class="actions"><a></a><a></a><a></a></div>
+        </article>
+      ERB
+      standalone = '<div class="actions"><a></a><a></a><a></a></div>'
+      4.times { |i| write_view "app/views/card#{i}.html.erb", with_article }
+      2.times { |i| write_view "app/views/stand#{i}.html.erb", standalone }
+
+      patterns = run_patterns(min_size: 4)
+      counts = patterns.map(&:count).sort
+      expect(counts).to eq([4, 6])
+    end
+
+    it "doesn't false-match a sub-shape that happens to be a substring inside an unrelated tag" do
+      # `tr` appears as text inside `strong` if you do a naive substring
+      # search — but the shape grammar uses `(` / `,` / `)` boundaries,
+      # so the contains_subshape? check shouldn't trip.
+      a = "<strong><em></em><em></em><em></em><em></em></strong>"
+      b = "<tr><td></td><td></td><td></td><td></td></tr>"
+      3.times { |i| write_view "app/views/a#{i}.html.erb", a }
+      3.times { |i| write_view "app/views/b#{i}.html.erb", b }
+
+      patterns = run_patterns
+      shapes = patterns.map(&:shape).sort
+      expect(shapes).to eq(["strong(em,em,em,em)", "tr(td,td,td,td)"])
     end
   end
 

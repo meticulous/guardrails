@@ -2,6 +2,7 @@
 
 require "pathname"
 require "digest"
+require "set"
 require_relative "erb_parser"
 
 module Guardrails
@@ -86,13 +87,62 @@ module Guardrails
         end
       end
 
-      occurrences
-        .select { |_, occs| occs.size >= @min_occurrences }
-        .map { |fp, occs| Pattern.new(fingerprint: fp, shape: shapes[fp], size: occs.first.size, occurrences: occs) }
-        .sort_by { |p| [-p.count, -p.size] }
+      patterns = occurrences
+                 .select { |_, occs| occs.size >= @min_occurrences }
+                 .map { |fp, occs| Pattern.new(fingerprint: fp, shape: shapes[fp], size: occs.first.size, occurrences: occs) }
+                 .sort_by { |p| [-p.count, -p.size] }
+
+      dedupe_nested(patterns)
     end
 
     private
+
+    # Drop redundant inner shapes. When a table repeats N times, three
+    # patterns end up with identical counts:
+    #
+    #   table(thead(tr(th,th,th)),tbody)   8x
+    #   thead(tr(th,th,th))                 8x
+    #   tr(th,th,th)                        8x
+    #
+    # The outer pattern is the one a refactor would extract; the inner
+    # shapes are just nested views of the same locations. Drop pattern A
+    # if there's another pattern B such that:
+    #   - A's shape appears as a sub-shape inside B's shape, AND
+    #   - A.count == B.count, AND
+    #   - every file in A.occurrences is also in B.occurrences
+    #
+    # Equal-count + file-containment is a strong signal that A's
+    # occurrences are exactly the children of B's occurrences — not a
+    # distinct repeated structure.
+    def dedupe_nested(patterns)
+      shape_to_pattern = patterns.to_h { |p| [p.shape, p] }
+      patterns.reject do |inner|
+        patterns.any? do |outer|
+          next false if outer.equal?(inner)
+          next false unless outer.count == inner.count
+          next false unless outer.size > inner.size
+          next false unless contains_subshape?(outer.shape, inner.shape)
+
+          outer_files = outer.occurrences.map(&:file).to_set
+          inner.occurrences.all? { |o| outer_files.include?(o.file) }
+        end
+      end
+    end
+
+    # True if `outer` contains `inner` as a proper child sub-shape — i.e.
+    # `inner` appears inside `outer` bounded by `(` / `,` / `)`. This
+    # avoids false matches like `tr` matching the middle of `strong`.
+    def contains_subshape?(outer, inner)
+      idx = 0
+      while (i = outer.index(inner, idx))
+        before = i.zero? ? nil : outer[i - 1]
+        after = outer[i + inner.length]
+        return true if [nil, "(", ","].include?(before) && [")", ","].include?(after)
+
+        idx = i + 1
+      end
+      false
+    end
 
     def view_files
       paths = VIEW_PATTERNS.flat_map { |g| Dir.glob(@root.join(g)) }.map { |p| Pathname(p) }.uniq
