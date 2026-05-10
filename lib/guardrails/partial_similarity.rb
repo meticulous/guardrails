@@ -107,6 +107,52 @@ module Guardrails
       open_tag_name(element.open_tag) if element.respond_to?(:open_tag) && element.open_tag
     end
 
+    # Group findings by connected component over the similarity graph.
+    # When N partials are pairwise above-threshold (e.g. 8 templated
+    # public_activity partials all matching each other at 1.00), the
+    # naive pair list emits C(N,2) lines that read as noise; collapsing
+    # to one group of N is what the user actually cares about.
+    #
+    # Returns an Array of Hashes keyed by:
+    #   :files     — sorted Array of file paths in the component
+    #   :score_min, :score_max — observed score range across the
+    #                             component's pairs
+    #   :pair_count — how many original pairs fed into the group
+    def group_findings(findings)
+      adj = Hash.new { |h, k| h[k] = Set.new }
+      findings.each do |f|
+        adj[f.file_a] << f.file_b
+        adj[f.file_b] << f.file_a
+      end
+
+      visited = Set.new
+      groups = []
+      adj.each_key do |file|
+        next if visited.include?(file)
+
+        component = Set.new
+        stack = [file]
+        until stack.empty?
+          current = stack.pop
+          next if component.include?(current)
+
+          component << current
+          visited << current
+          adj[current].each { |neighbor| stack << neighbor unless component.include?(neighbor) }
+        end
+
+        component_pairs = findings.select { |f| component.include?(f.file_a) && component.include?(f.file_b) }
+        scores = component_pairs.map(&:score)
+        groups << {
+          files: component.to_a.sort,
+          score_min: scores.min,
+          score_max: scores.max,
+          pair_count: component_pairs.size
+        }
+      end
+      groups.sort_by { |g| -g[:files].size }
+    end
+
     private
 
     def collect_partials
@@ -134,11 +180,26 @@ module Guardrails
     def print_report(findings)
       return if findings.empty?
 
+      groups = group_findings(findings)
+      total_files = groups.sum { |g| g[:files].size }
+
       @output.puts ""
-      noun = findings.length == 1 ? "pair" : "pairs"
-      @output.puts "Guardrails templates: #{findings.length} similar #{noun} (>= #{@threshold} structural similarity)"
-      findings.each do |f|
-        @output.puts "  #{format('%.2f', f.score)}  #{f.file_a} ↔ #{f.file_b}  (#{f.tag_count_a} / #{f.tag_count_b} tags)"
+      group_noun = groups.length == 1 ? "group" : "groups"
+      @output.puts "Guardrails templates: #{groups.length} similar #{group_noun} (#{findings.length} pairs across #{total_files} files; >= #{@threshold} structural similarity)"
+
+      groups.each do |group|
+        if group[:files].length == 2
+          file_a, file_b = group[:files]
+          @output.puts "  #{format('%.2f', group[:score_max])}  #{file_a} ↔ #{file_b}"
+        else
+          score_label = if group[:score_min] == group[:score_max]
+                         format("%.2f", group[:score_max])
+                       else
+                         "#{format('%.2f', group[:score_min])}–#{format('%.2f', group[:score_max])}"
+                       end
+          @output.puts "  Group of #{group[:files].length} templates (#{score_label}, #{group[:pair_count]} pairs):"
+          group[:files].each { |f| @output.puts "    #{f}" }
+        end
       end
     end
   end

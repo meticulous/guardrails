@@ -200,8 +200,13 @@ module Guardrails
       end
 
       missing = configured_sources.reject(&:exist?)
-      missing.each do |f|
-        @output.puts "Guardrails tokens: configured token file does not exist (#{f.relative_path_from(@root)})"
+      if missing.any?
+        missing.each do |f|
+          relative = f.relative_path_from(@root)
+          key = (f == colors_file) ? "tokens.colors_file" : "tokens.type_scale_file"
+          @output.puts "Guardrails tokens: configured #{key} does not exist (#{relative})"
+        end
+        @output.puts "  → Edit guardrails.yml to point at your real token file, or set FORCE=1 and re-run guardrails:init to regenerate config."
       end
 
       existing_sources = all_sources.select(&:exist?)
