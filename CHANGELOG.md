@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-05-10
+
+Patch release driven by dogfooding 0.2.2 against [Avo](https://github.com/avo-hq/avo) (Tailwind admin framework) and [Forem](https://github.com/forem/forem) (content platform). Three real-world layout/path patterns fixed.
+
+### Fixed
+
+- **`StimulusAudit` finds controllers under any `app/javascript/**/controllers/` or `app/frontend/controllers/` layout.** Previously hardcoded to `app/javascript/controllers/`, so Avo's `app/javascript/js/controllers/` (and Vite Rails's `app/frontend/controllers/`) reported every controller as orphaned. Controller-name derivation now anchors on the deepest `controllers/` segment in the path, so namespacing still works correctly across all four common layouts.
+- **`Tokens` hints when `tailwind.config.js` uses `presets: [...]` import.** The Tailwind v3 parser is regex-based and can't follow JS imports, so preset-style configs (Avo, many shared-config setups) produce zero tokens — and the previous output looked like a parser bug. The new hint surfaces alongside the 0-tokens line: "tailwind.config.js uses a `presets:` import; only the literal config file is parsed (we don't evaluate JS). Define non-color tokens in v4 `@theme` blocks for cross-tool token visibility."
+- **Audit now also implicit-ignores plain `mailer/` directories** (Devise's `app/views/devise/mailer/` convention), not just `*_mailer/` paths from the 0.2.1 fix. The regex anchors on the segment, so lookalikes like `_mailer_partial/` still correctly don't match.
+
+### Verified
+
+| Repo | Effect |
+|---|---|
+| Avo | Stimulus: 39 orphaned / 0 dead → 17 orphaned / 31 dead (real findings now visible). Tokens output gains the preset hint. |
+| Forem | Audit: 986 → 960 violations (26 false positives in `app/views/devise/mailer/` removed) |
+
+[0.2.3]: https://github.com/meticulous/guardrails/releases/tag/v0.2.3
+
 ## [0.2.2] - 2026-05-10
 
 UX patch — two report-clarity fixes following the Talos dogfood. No detection-logic changes.
@@ -155,5 +174,5 @@ Initial public release. Ships V0 + most of V1 from the [roadmap](doc/ROADMAP.md)
 - [`doc/LOOKBOOK.md`](doc/LOOKBOOK.md) — Lookbook panel integration guide.
 - [`doc/A11Y.md`](doc/A11Y.md) — static a11y rules and the axe-core layering recipe for runtime coverage.
 
-[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/meticulous/guardrails/compare/v0.2.3...HEAD
 [0.1.0]: https://github.com/meticulous/guardrails/releases/tag/v0.1.0
