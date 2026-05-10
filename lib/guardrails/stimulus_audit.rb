@@ -10,7 +10,17 @@ module Guardrails
       end
     end
 
-    CONTROLLER_DIR = "app/javascript/controllers"
+    # Stimulus controller files can live under different layouts depending
+    # on bundler / app structure:
+    #
+    #   app/javascript/controllers/*_controller.{js,ts}        (importmap default)
+    #   app/javascript/js/controllers/*_controller.{js,ts}     (Avo)
+    #   app/javascript/packs/controllers/*_controller.{js,ts}  (older Webpacker)
+    #   app/frontend/controllers/*_controller.{js,ts}          (Vite Rails)
+    #
+    # Glob from each accepted base; controller-name derivation hinges on
+    # the deepest `controllers/` segment in the path.
+    CONTROLLER_BASES = %w[app/javascript app/frontend].freeze
     CONTROLLER_GLOB = "**/*_controller.{js,ts}"
 
     VIEW_PATTERNS = [
@@ -47,12 +57,33 @@ module Guardrails
     private
 
     def collect_defined_controllers
-      base = @root.join(CONTROLLER_DIR)
-      return [] unless base.exist?
+      paths = CONTROLLER_BASES.flat_map do |base|
+        absolute = @root.join(base)
+        next [] unless absolute.exist?
 
-      Dir.glob(base.join(CONTROLLER_GLOB)).map do |path|
-        controller_name_from(Pathname(path).relative_path_from(base))
-      end.uniq
+        Dir.glob(absolute.join(CONTROLLER_GLOB))
+      end
+      paths.map { |path| controller_name_from_path(path) }.compact.uniq
+    end
+
+    # Derive a Stimulus controller identifier from a file path. We anchor
+    # on the deepest `controllers/` directory in the path, so:
+    #
+    #   app/javascript/controllers/users/profile_controller.js → "users--profile"
+    #   app/javascript/js/controllers/foo_controller.js        → "foo"
+    #   app/frontend/controllers/admin/users_controller.ts     → "admin--users"
+    #
+    # Falls back to the basename when no `controllers/` segment exists.
+    def controller_name_from_path(path)
+      str = path.to_s
+      marker = "/controllers/"
+      idx = str.rindex(marker)
+      relative = idx ? str[(idx + marker.length)..] : File.basename(str)
+
+      stripped = relative.sub(/_controller\.(js|ts)\z/, "")
+      return nil if stripped.empty?
+
+      stripped.gsub("/", "--").tr("_", "-")
     end
 
     def collect_referenced_controllers
@@ -66,11 +97,6 @@ module Guardrails
       [DATA_CONTROLLER_PATTERN, RUBY_DATA_CONTROLLER_PATTERN].flat_map do |pattern|
         content.scan(pattern).flat_map { |captures| captures[0].strip.split(/\s+/) }
       end
-    end
-
-    def controller_name_from(relative_path)
-      stripped = relative_path.to_s.sub(/_controller\.(js|ts)\z/, "")
-      stripped.gsub("/", "--").tr("_", "-")
     end
 
     def print_report(result)

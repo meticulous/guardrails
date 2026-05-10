@@ -25,13 +25,18 @@ module Guardrails
     IMPLICIT_IGNORE = %w[vendor node_modules tmp public log].freeze
 
     # Path-component patterns that are also implicit-ignored. Mailer
-    # views (`app/views/contact_mailer/`, `app/views/billing_mailer/`,
-    # etc.) are auto-skipped because email clients require inline
+    # views are auto-skipped because email clients require inline
     # styles — flagging them as design-system drift is incorrect by
-    # design. Found in dogfooding against Talos (24 of 109 inline_style
-    # findings were in mailer views).
+    # design.
+    #
+    # Matches both Rails conventions:
+    #   app/views/contact_mailer/    (*_mailer convention from Talos)
+    #   app/views/devise/mailer/     (plain `mailer` from Forem/Devise)
+    #
+    # The leading-underscore prefix is required for the prefix path so
+    # `_mailer_partial/` (a regular partials dir) doesn't match.
     IMPLICIT_IGNORE_PATTERNS = [
-      /\A\w+_mailer\z/
+      /\A(?:\w+_)?mailer\z/
     ].freeze
 
     # Color literal patterns — applied to the static portion of an

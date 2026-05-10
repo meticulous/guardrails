@@ -74,6 +74,42 @@ RSpec.describe Guardrails::StimulusAudit do
       expect(result.dead).to be_empty
     end
 
+    it "finds controllers under app/javascript/js/controllers/ (Avo layout)" do
+      write_file "app/javascript/js/controllers/foo_controller.js"
+      write_file "app/views/x.html.erb", '<div data-controller="foo">x</div>'
+
+      result = run_audit
+      expect(result.dead).to be_empty
+      expect(result.orphaned).to be_empty
+    end
+
+    it "finds controllers under app/javascript/packs/controllers/ (older Webpacker)" do
+      write_file "app/javascript/packs/controllers/bar_controller.js"
+      write_file "app/views/x.html.erb", '<div data-controller="bar">x</div>'
+
+      result = run_audit
+      expect(result.dead).to be_empty
+    end
+
+    it "finds controllers under app/frontend/controllers/ (Vite Rails)" do
+      write_file "app/frontend/controllers/baz_controller.ts"
+      write_file "app/views/x.html.erb", '<div data-controller="baz">x</div>'
+
+      result = run_audit
+      expect(result.dead).to be_empty
+    end
+
+    it "anchors namespacing on the deepest controllers/ segment" do
+      # Avo-style: app/javascript/js/controllers/admin/users_controller.js
+      # should map to "admin--users", NOT "js--admin--users"
+      write_file "app/javascript/js/controllers/admin/users_controller.js"
+      write_file "app/views/x.html.erb", '<div data-controller="admin--users">x</div>'
+
+      result = run_audit
+      expect(result.dead).to be_empty
+      expect(result.orphaned).to be_empty
+    end
+
     it "scans both app/views and app/components" do
       write_file "app/javascript/controllers/foo_controller.js"
       write_file "app/components/x.html.erb", '<div data-controller="foo">x</div>'

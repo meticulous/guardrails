@@ -53,11 +53,31 @@ module Guardrails
     end
 
     def parse_tailwind_config
+      # Reset on every call — a Tokens instance can outlive a single run
+      # (callers may reuse it), and tailwind.config.js can change between
+      # runs. Without this, the hint can leak into later summaries after
+      # the config no longer matches the preset pattern.
+      @tailwind_preset_hint = nil
+
       file = @root.join("tailwind.config.js")
       return [] unless file.exist?
 
       content = File.read(file, encoding: Encoding::UTF_8)
-      TailwindConfigParser.parse(content).map do |entry|
+      entries = TailwindConfigParser.parse(content)
+
+      # If the literal config has zero parseable entries but uses the
+      # preset import pattern, the actual tokens live in a JS file we
+      # can't evaluate. Surface a one-line hint so users don't think
+      # the parser is broken — found in the Avo dogfood where
+      # tailwind.config.js does `module.exports = { presets: [preset] }`.
+      if entries.empty? && tailwind_uses_presets?(content)
+        @tailwind_preset_hint =
+          "tailwind.config.js uses a `presets:` import; only the literal config file " \
+            "is parsed (we don't evaluate JS). Define non-color tokens in v4 `@theme` " \
+            "blocks for cross-tool token visibility."
+      end
+
+      entries.map do |entry|
         Token.new(
           name: entry.name,
           value: entry.value,
@@ -99,6 +119,10 @@ module Guardrails
     end
 
     private
+
+    def tailwind_uses_presets?(content)
+      content.match?(/\bpresets\s*:/)
+    end
 
     def load_config
       path = @root.join("guardrails.yml")
@@ -221,9 +245,11 @@ module Guardrails
       labels = existing_sources.map { |f| f.relative_path_from(@root).to_s }.join(", ")
       if tokens.empty?
         @output.puts "Guardrails tokens: 0 tokens found in #{labels}"
+        @output.puts "  → #{@tailwind_preset_hint}" if @tailwind_preset_hint
         return
       end
       @output.puts "Guardrails tokens: #{tokens.length} token#{'s' if tokens.length != 1} found in #{labels}"
+      @output.puts "  → #{@tailwind_preset_hint}" if @tailwind_preset_hint
       tokens.each { |t| @output.puts "  #{format_token_name(t)} = #{t.value}" }
     end
   end
