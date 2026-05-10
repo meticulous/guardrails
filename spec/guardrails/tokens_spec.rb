@@ -311,6 +311,17 @@ RSpec.describe Guardrails::Tokens do
       expect(output.string).to include("FORCE=1")
     end
 
+    it "names BOTH keys when both point at missing paths (even if the same path)" do
+      # Edge case: user configured both keys to the same path. Without
+      # explicit iteration, Pathname-equality would mislabel one of them.
+      configure(colors_file: "missing/tokens.scss", type_scale_file: "missing/tokens.scss")
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("configured tokens.colors_file does not exist")
+      expect(output.string).to include("configured tokens.type_scale_file does not exist")
+    end
+
     it "reports the token count and contents" do
       configure(colors_file: "tokens.scss")
       write_file "tokens.scss", "$primary: #0066ff;"

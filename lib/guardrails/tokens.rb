@@ -189,21 +189,27 @@ module Guardrails
     end
 
     def print_summary(tokens)
-      configured_sources = [colors_file, type_scale_file].compact
+      # Iterate the two config entries explicitly so the missing-file
+      # message names the right YAML key even when both keys point at
+      # the same path (Pathname equality alone can't tell them apart).
+      configured_entries = [
+        ["tokens.colors_file", colors_file],
+        ["tokens.type_scale_file", type_scale_file]
+      ].select { |_key, path| path }
+
       tailwind_path = @root.join("tailwind.config.js")
       tailwind_source = tailwind_path.exist? ? tailwind_path : nil
-      all_sources = configured_sources + [tailwind_source].compact
+      all_sources = configured_entries.map { |_, p| p } + [tailwind_source].compact
 
       if all_sources.empty?
         @output.puts "Guardrails tokens: no colors_file, type_scale_file, or tailwind.config.js found"
         return
       end
 
-      missing = configured_sources.reject(&:exist?)
+      missing = configured_entries.reject { |_, path| path.exist? }
       if missing.any?
-        missing.each do |f|
-          relative = f.relative_path_from(@root)
-          key = (f == colors_file) ? "tokens.colors_file" : "tokens.type_scale_file"
+        missing.each do |key, path|
+          relative = path.relative_path_from(@root)
           @output.puts "Guardrails tokens: configured #{key} does not exist (#{relative})"
         end
         @output.puts "  → Edit guardrails.yml to point at your real token file, or set FORCE=1 and re-run guardrails:init to regenerate config."
