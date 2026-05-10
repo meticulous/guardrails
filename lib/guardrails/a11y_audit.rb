@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "set"
 require_relative "erb_parser"
 
 module Guardrails
@@ -186,9 +187,11 @@ module Guardrails
       ErbParser.compact_children(node).any? { |child| descendant_has_erb_output?(child) }
     end
 
-    # Concatenated visible text content from descendant HTMLTextNodes.
-    # Skips ERB nodes (handled separately by body_contains_erb_output?)
-    # and nested element children.
+    # Concatenated visible text content from descendant HTMLTextNodes —
+    # walks the entire subtree, including text inside nested elements
+    # (`<button><span>Save</span></button>` returns "Save"). ERB nodes
+    # don't contribute; the dynamic-content case is handled separately
+    # by body_contains_erb_output?.
     def visible_text_in(element)
       text = +""
       ErbParser.each_node(element).each do |node|
@@ -201,19 +204,15 @@ module Guardrails
     end
 
     def labeled_by_for?(id)
-      # Looking for `<label for="id">` somewhere in the document. We
-      # don't have document-wide context here per element; the caller
-      # passes the file content via instance state. For now, fall back
-      # to a per-file scan one more time when needed.
       @label_for_cache ||= collect_labels_for_ids
       @label_for_cache.include?(id)
     end
 
     # Walk the AST once per file to collect every `<label>` element's
     # `for` attribute value into a Set. Cached for the duration of one
-    # file's scan_file call.
+    # file's scan_file call so successive labeled_by_for? checks are O(1).
     def collect_labels_for_ids
-      ids = []
+      ids = Set.new
       ErbParser.each_node(@current_document) do |node|
         next unless node.is_a?(::Herb::AST::HTMLElementNode)
         next unless element_tag_name(node) == "label"
