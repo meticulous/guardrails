@@ -24,6 +24,16 @@ module Guardrails
     # NOT interpreted as shell globs.
     IMPLICIT_IGNORE = %w[vendor node_modules tmp public log].freeze
 
+    # Path-component patterns that are also implicit-ignored. Mailer
+    # views (`app/views/contact_mailer/`, `app/views/billing_mailer/`,
+    # etc.) are auto-skipped because email clients require inline
+    # styles — flagging them as design-system drift is incorrect by
+    # design. Found in dogfooding against Talos (24 of 109 inline_style
+    # findings were in mailer views).
+    IMPLICIT_IGNORE_PATTERNS = [
+      /\A\w+_mailer\z/
+    ].freeze
+
     # Color literal patterns — applied to the static portion of an
     # attribute value extracted via the AST.
     HEX_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b/
@@ -105,6 +115,7 @@ module Guardrails
       # vendor/foo`. User-configured ignores keep the original prefix
       # semantics so they can name specific subtrees.
       return true if (IMPLICIT_IGNORE & segments).any?
+      return true if segments.any? { |seg| IMPLICIT_IGNORE_PATTERNS.any? { |pat| seg.match?(pat) } }
 
       Array(@config["ignore"] || []).any? do |ignore|
         relative == ignore || relative.start_with?("#{ignore}/")
@@ -236,7 +247,13 @@ module Guardrails
     # for HTMLElementNodes whose tag matches HELPER_RECOMMENDED_TAGS, and
     # flags ones that wrap an `<%=` ERB output (control flow `<% %>` and
     # `<%# %>` comments are excluded — they're distinguished by the
-    # ERBContentNode#tag_opening value, not by guessing in regex).
+    # ERBContentNode#tag_opening value).
+    #
+    # Skips elements that already declare aria-label or aria-labelledby:
+    # the user has explicitly handled accessibility on the literal tag,
+    # so the suggestion to switch to `tag.button` / `link_to` is just
+    # idiom noise, not a real signal. Found in dogfooding against Talos
+    # (16 of 44 findings were on aria-labeled icon buttons).
     def detect_helper_recommended_ast(parse_result, file, original_lines)
       results = []
       ErbParser.each_node(parse_result.document) do |node|
@@ -245,6 +262,7 @@ module Guardrails
         tag = element_tag_name(node)
         next unless HELPER_RECOMMENDED_TAGS.key?(tag)
         next if tag == "a" && !element_has_attribute?(node, "href")
+        next if element_has_attribute?(node, "aria-label") || element_has_attribute?(node, "aria-labelledby")
         next unless body_contains_erb_output?(node)
 
         line, column = ErbParser.start_position(node)
