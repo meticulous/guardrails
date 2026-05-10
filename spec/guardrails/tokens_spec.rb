@@ -327,6 +327,28 @@ RSpec.describe Guardrails::Tokens do
       expect(output.string).not_to include("presets:")
     end
 
+    it "clears the preset hint between runs on the same instance" do
+      # First run: preset-style config triggers the hint
+      write_file "tailwind.config.js", <<~JS
+        const preset = require('./preset')
+        module.exports = { presets: [preset] }
+      JS
+      audit = described_class.new(root: root, output: StringIO.new)
+      audit.run
+
+      # Second run: rewrite the config to a literal-tokens form
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+      output = StringIO.new
+      reused = described_class.new(root: root, output: output)
+      reused.run
+      # And again on the SAME instance to confirm no carryover
+      reused.run
+
+      expect(output.string).not_to include("uses a `presets:` import")
+    end
+
     it "names which config key was missing and points at remediation" do
       configure(colors_file: "missing/_colors.scss")
       output = StringIO.new

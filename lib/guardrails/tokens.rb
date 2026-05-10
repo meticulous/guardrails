@@ -53,6 +53,12 @@ module Guardrails
     end
 
     def parse_tailwind_config
+      # Reset on every call — a Tokens instance can outlive a single run
+      # (callers may reuse it), and tailwind.config.js can change between
+      # runs. Without this, the hint can leak into later summaries after
+      # the config no longer matches the preset pattern.
+      @tailwind_preset_hint = nil
+
       file = @root.join("tailwind.config.js")
       return [] unless file.exist?
 
@@ -80,10 +86,6 @@ module Guardrails
           line: 0
         )
       end
-    end
-
-    def tailwind_uses_presets?(content)
-      content.match?(/\bpresets\s*:/)
     end
 
     def detect_drift(tokens)
@@ -117,6 +119,10 @@ module Guardrails
     end
 
     private
+
+    def tailwind_uses_presets?(content)
+      content.match?(/\bpresets\s*:/)
+    end
 
     def load_config
       path = @root.join("guardrails.yml")
