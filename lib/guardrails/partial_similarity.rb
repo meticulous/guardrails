@@ -114,15 +114,21 @@ module Guardrails
     # to one group of N is what the user actually cares about.
     #
     # Returns an Array of Hashes keyed by:
-    #   :files     — sorted Array of file paths in the component
+    #   :files       — sorted Array of file paths in the component
     #   :score_min, :score_max — observed score range across the
-    #                             component's pairs
-    #   :pair_count — how many original pairs fed into the group
+    #                            component's pairs
+    #   :pair_count  — how many original pairs fed into the group
+    #   :sample_pair — a representative Finding (the only one for size-2
+    #                  components, used to preserve the original pair
+    #                  line's tag-count detail)
     def group_findings(findings)
       adj = Hash.new { |h, k| h[k] = Set.new }
+      pairs_by_file = Hash.new { |h, k| h[k] = [] }
       findings.each do |f|
         adj[f.file_a] << f.file_b
         adj[f.file_b] << f.file_a
+        pairs_by_file[f.file_a] << f
+        pairs_by_file[f.file_b] << f
       end
 
       visited = Set.new
@@ -141,13 +147,27 @@ module Guardrails
           adj[current].each { |neighbor| stack << neighbor unless component.include?(neighbor) }
         end
 
-        component_pairs = findings.select { |f| component.include?(f.file_a) && component.include?(f.file_b) }
+        # Walk only the findings touching files in this component (via the
+        # pre-built index) — avoids the O(components × pairs) scan.
+        seen_pair_ids = Set.new
+        component_pairs = []
+        component.each do |f|
+          pairs_by_file[f].each do |pair|
+            next unless component.include?(pair.file_a) && component.include?(pair.file_b)
+            next if seen_pair_ids.include?(pair.object_id)
+
+            seen_pair_ids << pair.object_id
+            component_pairs << pair
+          end
+        end
+
         scores = component_pairs.map(&:score)
         groups << {
           files: component.to_a.sort,
           score_min: scores.min,
           score_max: scores.max,
-          pair_count: component_pairs.size
+          pair_count: component_pairs.size,
+          sample_pair: component_pairs.first
         }
       end
       groups.sort_by { |g| -g[:files].size }
@@ -189,8 +209,13 @@ module Guardrails
 
       groups.each do |group|
         if group[:files].length == 2
+          # Use the original Finding so we keep the tag-count suffix
+          # (e.g. "(12 / 14 tags)") that single-pair output has always
+          # included. The sorted file list is still authoritative for
+          # display order.
+          pair = group[:sample_pair]
           file_a, file_b = group[:files]
-          @output.puts "  #{format('%.2f', group[:score_max])}  #{file_a} ↔ #{file_b}"
+          @output.puts "  #{format('%.2f', group[:score_max])}  #{file_a} ↔ #{file_b}  (#{pair.tag_count_a} / #{pair.tag_count_b} tags)"
         else
           score_label = if group[:score_min] == group[:score_max]
                          format("%.2f", group[:score_max])

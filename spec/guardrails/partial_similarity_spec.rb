@@ -263,6 +263,13 @@ RSpec.describe Guardrails::PartialSimilarity do
       expect(groups.first[:files].length).to eq(3)
       expect(groups.last[:files].length).to eq(2)
     end
+
+    it "exposes a sample_pair Finding for downstream rendering" do
+      pair = finding("a.html.erb", "b.html.erb")
+      groups = audit.group_findings([pair])
+
+      expect(groups.first[:sample_pair]).to eq(pair)
+    end
   end
 
   describe "report output" do
@@ -295,6 +302,19 @@ RSpec.describe Guardrails::PartialSimilarity do
 
       expect(output.string).to include("Group of 4 templates")
       expect(output.string).to include("6 pairs") # C(4,2)
+    end
+
+    it "preserves tag-count suffix for size-2 (single-pair) groups" do
+      structure_a = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
+      structure_b = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
+      write_partial "app/views/_a.html.erb", structure_a
+      write_partial "app/views/_b.html.erb", structure_b
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      # Original pair format includes the tag-count suffix
+      expect(output.string).to match(/_a\.html\.erb ↔ .+_b\.html\.erb\s+\(\d+ \/ \d+ tags\)/)
     end
   end
 end
