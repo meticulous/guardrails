@@ -102,6 +102,12 @@ RSpec.describe Guardrails::A11yAudit do
 
       expect(run_audit.map(&:rule)).to include(:button_name)
     end
+
+    it "skips button_name when ERB output is nested inside a child element" do
+      write_view "app/views/x.html.erb", "<button><span><%= label %></span></button>"
+
+      expect(run_audit.map(&:rule)).not_to include(:button_name)
+    end
   end
 
   describe "link_name" do

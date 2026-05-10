@@ -375,6 +375,18 @@ RSpec.describe Guardrails::Audit do
       expect(run_audit.map(&:type)).to eq([:helper_recommended])
     end
 
+    it "flags <button> with ERB output nested inside a child element" do
+      write_view "app/views/x.html.erb", "<button><span><%= label %></span></button>"
+
+      expect(run_audit.map(&:type)).to eq([:helper_recommended])
+    end
+
+    it "flags <a href> with ERB output nested deep in the body" do
+      write_view "app/views/x.html.erb", '<a href="/x"><div><span><%= label %></span></div></a>'
+
+      expect(run_audit.map(&:type)).to eq([:helper_recommended])
+    end
+
     it "captures the line of the opening tag for multi-line elements" do
       write_view "app/views/x.html.erb", <<~ERB
         <h1>Title</h1>
