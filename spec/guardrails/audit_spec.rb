@@ -517,13 +517,18 @@ RSpec.describe Guardrails::Audit do
       expect(violations.map(&:file)).to eq(["app/views/welcome.html.erb"])
     end
 
-    it "does not match `mailer` (without underscore) or other lookalikes as mailer dirs" do
-      write_view "app/views/mailer/x.html.erb", '<p style="color: red">x</p>'
+    it "implicit-ignores plain `mailer/` (Devise convention, e.g. devise/mailer/)" do
+      write_view "app/views/welcome.html.erb", '<p style="color: red">x</p>'
+      write_view "app/views/devise/mailer/_creator_confirmation.html.erb", '<p style="color: red">x</p>'
+
+      violations = run_audit
+      expect(violations.map(&:file)).to eq(["app/views/welcome.html.erb"])
+    end
+
+    it "does not match lookalikes like `_mailer_partial` as mailer dirs" do
       write_view "app/views/_mailer_partial/x.html.erb", '<p style="color: red">x</p>'
 
-      # `mailer` (no prefix) and `_mailer_partial` shouldn't match the
-      # `*_mailer` regex; both should be scanned normally.
-      expect(run_audit.length).to eq(2)
+      expect(run_audit.length).to eq(1)
     end
   end
 
