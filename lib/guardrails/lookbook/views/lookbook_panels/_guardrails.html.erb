@@ -1,0 +1,44 @@
+<% findings = local_assigns[:findings] %>
+<% if findings.nil? %>
+  <p class="lookbook-guardrails-empty">No Guardrails data for this component — Guardrails couldn't locate the component class file under <code>app/components/</code>.</p>
+<% else %>
+  <% violations      = findings[:violations] || [] %>
+  <% orphan_slots    = findings[:orphan_slots] || [] %>
+  <% similar         = findings[:similar_templates] || [] %>
+  <% any_findings    = violations.any? || orphan_slots.any? || similar.any? %>
+
+  <% if violations.any? %>
+    <h4>Drift in template</h4>
+    <ul>
+      <% violations.each do |v| %>
+        <li>
+          <strong><%= v[:type] %></strong>
+          <%= v[:file] %>:<%= v[:line] %>
+          — <code><%= v[:snippet] %></code>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <% if orphan_slots.any? %>
+    <h4>Orphan slots</h4>
+    <ul>
+      <% orphan_slots.each do |slot| %>
+        <li>:<%= slot[:slot] %> (<%= slot[:slot_kind] %>) declared but not rendered (<%= slot[:file] %>:<%= slot[:line] %>)</li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <% if similar.any? %>
+    <h4>Similar templates</h4>
+    <ul>
+      <% similar.each do |s| %>
+        <li><%= s[:partner] %> (<%= (s[:score] * 100).round %>% match)</li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <% unless any_findings %>
+    <p class="lookbook-guardrails-clean">No findings — this component is clean.</p>
+  <% end %>
+<% end %>
