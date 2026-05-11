@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require_relative "report/style"
 
 module Guardrails
   class ViewComponentAudit
@@ -22,9 +23,10 @@ module Guardrails
 
     SLOT_PATTERN = /^\s*(renders_one|renders_many)\s+:([a-z_][\w]*)/
 
-    def initialize(root:, output: $stdout)
+    def initialize(root:, output: $stdout, style: nil)
       @root = Pathname(root)
       @output = output
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -132,17 +134,38 @@ module Guardrails
     def print_report(result)
       return unless result.violations?
 
-      @output.puts ""
       unless result.missing_previews.empty?
         noun = result.missing_previews.length == 1 ? "component" : "components"
-        @output.puts "Guardrails view_components: #{result.missing_previews.length} #{noun} without a preview"
-        result.missing_previews.each { |name| @output.puts "  - #{name}_component.rb (no #{name}_component_preview.rb)" }
+        @output.puts ""
+        @output.puts @style.section_heading(
+          :warning,
+          "view_components missing previews (#{result.missing_previews.length} #{noun})"
+        )
+        @output.puts "  Component classes without a corresponding Lookbook preview file."
+        @output.puts "  Add #{noun} previews so the component is discoverable + visually testable."
+        result.missing_previews.each do |name|
+          @output.puts ""
+          @output.puts "  #{@style.severity(:warning, "missing preview: #{name}_component")}"
+          @output.puts "    #{@style.suggestion("create test/components/previews/#{name}_component_preview.rb (or lookbook/previews/...)")}"
+        end
       end
+
       unless result.orphan_slots.empty?
-        noun = result.orphan_slots.length == 1 ? "slot declared" : "slots declared"
-        @output.puts "Guardrails view_components: #{result.orphan_slots.length} #{noun} but never referenced in template"
+        noun = result.orphan_slots.length == 1 ? "slot" : "slots"
+        @output.puts ""
+        @output.puts @style.section_heading(
+          :warning,
+          "view_components orphan slots (#{result.orphan_slots.length} #{noun})"
+        )
+        @output.puts "  renders_one / renders_many declared in the component class but never"
+        @output.puts "  referenced in the template. Either reference the slot or remove the"
+        @output.puts "  declaration."
         result.orphan_slots.each do |o|
-          @output.puts "  - #{o.component}_component: :#{o.slot} (#{o.slot_kind} at #{o.file}:#{o.line})"
+          @output.puts ""
+          header = "orphan slot: #{o.component}_component##{o.slot} (#{o.slot_kind})"
+          @output.puts "  #{@style.severity(:warning, header)}"
+          @output.puts "    #{@style.suggestion("reference :#{o.slot} in the template, or remove the #{o.slot_kind} declaration")}"
+          @output.puts "    #{@style.location("#{o.file}:#{o.line}")}"
         end
       end
     end

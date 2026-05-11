@@ -545,9 +545,34 @@ RSpec.describe Guardrails::Audit do
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("1 violation found")
-      expect(output.string).to include("[inline_style]")
+      # Per-type section heading with severity + count
+      expect(output.string).to include("WARNING")
+      expect(output.string).to include("inline_style (1 finding)")
+      # Framing intro tells the reader what this catches + the action
+      expect(output.string).to include("bypass your design tokens")
+      # Tagged finding line + suggestion arrow
+      expect(output.string).to include("[warning]")
+      expect(output.string).to include("→")
+      expect(output.string).to include("extract to a CSS class")
       expect(output.string).to include("app/views/x.html.erb:1")
+    end
+
+    it "shows the matched token inline for raw_color when a token is defined" do
+      File.write(root.join("guardrails.yml"), <<~YAML)
+        guardrails:
+          tokens:
+            colors_file: app/assets/stylesheets/tokens/_colors.css
+      YAML
+      tokens_path = root.join("app/assets/stylesheets/tokens/_colors.css")
+      tokens_path.dirname.mkpath
+      tokens_path.write(":root { --color-blue: #0066ff; }")
+      write_view "app/views/x.html.erb", '<svg fill="#0066ff"></svg>'
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("raw_color (1 finding, auto-fix available)")
+      expect(output.string).to include("replace with var(--color-blue)")
     end
   end
 end

@@ -3,6 +3,7 @@
 require "json"
 require "pathname"
 require "set"
+require_relative "report/style"
 
 module Guardrails
   # Consumes axe-core JSON output and folds the findings into Guardrails'
@@ -37,10 +38,11 @@ module Guardrails
     # `failing_impacts:` if your rule pack emits custom severities.
     DEFAULT_FAILING_IMPACTS = %w[minor moderate serious critical].freeze
 
-    def initialize(input:, output: $stdout, failing_impacts: DEFAULT_FAILING_IMPACTS)
+    def initialize(input:, output: $stdout, failing_impacts: DEFAULT_FAILING_IMPACTS, style: nil)
       @input = input
       @output = output
       @failing_impacts = Set.new(failing_impacts.map(&:to_s))
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -101,18 +103,37 @@ module Guardrails
       return if findings.empty?
 
       grouped = findings.group_by(&:url)
+      noun = findings.length == 1 ? "finding" : "findings"
+
       @output.puts ""
-      @output.puts "Guardrails a11y (deep): #{findings.length} finding#{'s' if findings.length != 1} from axe-core"
+      @output.puts @style.section_heading(
+        :error,
+        "a11y deep (#{findings.length} #{noun} from axe-core)"
+      )
+      @output.puts "  Runtime accessibility issues axe-core caught against your live pages."
+      @output.puts "  Each links to dequeuniversity.com for the canonical remediation."
 
       grouped.each do |url, page_findings|
         @output.puts ""
-        @output.puts "  #{url || '(no url)'}"
+        @output.puts "  #{@style.location(url || '(no url)')}"
         page_findings.each do |f|
-          impact_label = f.impact ? "[#{f.impact}]" : "[unknown]"
-          selector = f.selector ? " (#{f.selector})" : ""
-          @output.puts "    #{impact_label} #{f.rule} — #{f.description}#{selector}"
-          @output.puts "      #{f.help_url}" if f.help_url
+          severity = impact_to_severity(f.impact)
+          impact_label = f.impact ? f.impact.to_s : "unknown"
+          selector_part = f.selector ? " (#{f.selector})" : ""
+          @output.puts "    #{@style.severity(severity, "[#{impact_label}] #{f.rule}: #{f.description}#{selector_part}")}"
+          @output.puts "      #{@style.suggestion("see #{f.help_url}")}" if f.help_url
         end
+      end
+    end
+
+    # Map axe-core's impact levels onto the report's three severities
+    # so they color-code consistently with static a11y findings.
+    def impact_to_severity(impact)
+      case impact.to_s
+      when "critical", "serious" then :error
+      when "moderate" then :warning
+      when "minor" then :suggestion
+      else :warning
       end
     end
   end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require_relative "report/style"
 
 module Guardrails
   class StimulusAudit
@@ -36,9 +37,10 @@ module Guardrails
     RUBY_DATA_CONTROLLER_PATTERN =
       /data:?\s*(?:=>)?\s*\{[^}]*?controller:?\s*(?:=>)?\s*["']([^"']+)["']/m
 
-    def initialize(root:, output: $stdout)
+    def initialize(root:, output: $stdout, style: nil)
       @root = Pathname(root)
       @output = output
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -102,16 +104,38 @@ module Guardrails
     def print_report(result)
       return unless result.violations?
 
-      @output.puts ""
       unless result.orphaned.empty?
         noun = result.orphaned.length == 1 ? "controller" : "controllers"
-        @output.puts "Guardrails stimulus: #{result.orphaned.length} orphaned #{noun} (referenced in HTML, no JS file)"
-        result.orphaned.each { |name| @output.puts "  - #{name}" }
+        @output.puts ""
+        @output.puts @style.section_heading(
+          :warning,
+          "stimulus orphaned (#{result.orphaned.length} #{noun})"
+        )
+        @output.puts "  data-controller=\"…\" references a Stimulus controller, but no matching"
+        @output.puts "  *_controller.{js,ts} file exists. Either create the controller or"
+        @output.puts "  remove the reference."
+        result.orphaned.each do |name|
+          @output.puts ""
+          @output.puts "  #{@style.severity(:warning, "stimulus orphaned: #{name}")}"
+          @output.puts "    #{@style.suggestion("create app/javascript/controllers/#{name}_controller.js or remove the data-controller=\"#{name}\" reference")}"
+        end
       end
+
       unless result.dead.empty?
         noun = result.dead.length == 1 ? "controller" : "controllers"
-        @output.puts "Guardrails stimulus: #{result.dead.length} dead #{noun} (JS file, never referenced)"
-        result.dead.each { |name| @output.puts "  - #{name}" }
+        @output.puts ""
+        @output.puts @style.section_heading(
+          :warning,
+          "stimulus dead (#{result.dead.length} #{noun})"
+        )
+        @output.puts "  *_controller.{js,ts} file exists, but no view references it via"
+        @output.puts "  data-controller=\"…\". Either wire the controller into a template"
+        @output.puts "  or delete the file."
+        result.dead.each do |name|
+          @output.puts ""
+          @output.puts "  #{@style.severity(:warning, "stimulus dead: #{name}")}"
+          @output.puts "    #{@style.suggestion("reference it via data-controller=\"#{name}\" in a view, or delete the JS file")}"
+        end
       end
     end
   end

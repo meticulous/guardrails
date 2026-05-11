@@ -2,6 +2,7 @@
 
 require "pathname"
 require_relative "erb_parser"
+require_relative "report/style"
 
 module Guardrails
   # Finds repeating "class soup" — the same long class list applied to
@@ -52,12 +53,14 @@ module Guardrails
     def initialize(root:, output: $stdout,
                    min_classes: DEFAULT_MIN_CLASSES,
                    min_occurrences: DEFAULT_MIN_OCCURRENCES,
-                   max_occurrences_shown: DEFAULT_MAX_OCCURRENCES_SHOWN)
+                   max_occurrences_shown: DEFAULT_MAX_OCCURRENCES_SHOWN,
+                   style: nil)
       @root = Pathname(root)
       @output = output
       @min_classes = min_classes
       @min_occurrences = min_occurrences
       @max_occurrences_shown = max_occurrences_shown
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -165,23 +168,47 @@ module Guardrails
 
       total_occurrences = clusters.sum(&:count)
       noun = clusters.length == 1 ? "cluster" : "clusters"
+
       @output.puts ""
-      @output.puts "Guardrails class-itis: #{clusters.length} repeating class #{noun} " \
-                   "(#{total_occurrences} occurrences; >= #{@min_classes} classes, >= #{@min_occurrences} occurrences)"
+      @output.puts @style.section_heading(
+        :suggestion,
+        "class-itis (#{clusters.length} #{noun}, #{total_occurrences} occurrences)"
+      )
+      @output.puts "  The same multi-class list applied to the same tag in many places —"
+      @output.puts "  classic AI-paste pattern. Consider extracting a shared component or"
+      @output.puts "  an @apply rule. Threshold: >= #{@min_classes} classes, >= #{@min_occurrences} occurrences."
 
       clusters.each do |cluster|
         @output.puts ""
-        @output.puts "  <#{cluster.tag}> with #{cluster.class_count} classes, " \
-                     "#{cluster.count} occurrences:"
+        header = "<#{cluster.tag}> with #{cluster.class_count} classes, #{cluster.count} occurrences"
+        @output.puts "  #{@style.severity(:suggestion, header)}"
+        @output.puts "    #{@style.suggestion(suggestion_for(cluster))}"
         @output.puts "    class=#{format_classes(cluster.classes)}"
         cluster.occurrences.first(@max_occurrences_shown).each do |occ|
-          @output.puts "    #{occ.file}:#{occ.line}"
+          @output.puts "    #{@style.location("#{occ.file}:#{occ.line}")}"
         end
         if cluster.occurrences.length > @max_occurrences_shown
           remaining = cluster.occurrences.length - @max_occurrences_shown
-          @output.puts "    … and #{remaining} more"
+          @output.puts "    #{@style.location("… and #{remaining} more")}"
         end
       end
+    end
+
+    # Suggestion shape varies by cluster size + count. Big class lists
+    # repeated many places want a component; smaller lists repeated
+    # often might just be a shared CSS rule.
+    def suggestion_for(cluster)
+      if cluster.class_count >= 8
+        "extract a #{component_name(cluster)} component — too many classes to keep inlined"
+      elsif cluster.count >= 6
+        "repeated this often, an @apply rule or shared class would dry it up"
+      else
+        "consider a shared component or @apply rule for this class list"
+      end
+    end
+
+    def component_name(cluster)
+      "#{cluster.tag.capitalize}Component"
     end
 
     # Cap the displayed class string so a 30-utility soup doesn't blow

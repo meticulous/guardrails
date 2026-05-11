@@ -119,7 +119,7 @@ RSpec.describe Guardrails::VisualDiff do
       write_screenshot "homepage.diff.png"
 
       described_class.new(root: root, output: output).run
-      expect(output.string).to include("Guardrails visual diff: 1 finding")
+      expect(output.string).to include("visual diff (1 finding")
       expect(output.string).to include("adapter: snap_diff")
       expect(output.string).to include("threshold: 0.0")
       expect(output.string).to include("[diff present] homepage")

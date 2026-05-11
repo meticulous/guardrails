@@ -107,19 +107,83 @@ namespace :guardrails do
       }
       $stdout.puts JSON.pretty_generate(payload)
     else
+      # Run each sub-audit against an in-memory sink first so we can
+      # render the top-of-report summary before the per-category
+      # details (the summary needs every detector's count). Then
+      # write the sink + per-category sections out together.
+      require "guardrails/report/summary"
+      sink = StringIO.new
       violations = Guardrails::Audit.new(
-        root: root, suggest: suggest, apply: apply, format: :text
+        root: root, output: sink, suggest: suggest, apply: apply, format: :text
       ).run
-      stimulus = Guardrails::StimulusAudit.new(root: root).run
+      stimulus = Guardrails::StimulusAudit.new(root: root, output: sink).run
+      similarity_opts[:output] = sink
       similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
-      vc = Guardrails::ViewComponentAudit.new(root: root).run
-      a11y = Guardrails::A11yAudit.new(root: root).run
+      vc = Guardrails::ViewComponentAudit.new(root: root, output: sink).run
+      a11y = Guardrails::A11yAudit.new(root: root, output: sink).run
+      pattern_opts[:output] = sink
       patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
+      classitis_opts[:output] = sink
       classitis = Guardrails::ClassItis.new(**classitis_opts).run
-      a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path) : nil
+      a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path, output: sink) : nil
       a11y_deep = a11y_deep_runner&.run || []
-      visual_diff_runner = visual_diff_on ? Guardrails::VisualDiff.new(root: root) : nil
+      visual_diff_runner = visual_diff_on ? Guardrails::VisualDiff.new(root: root, output: sink) : nil
       visual_diff = visual_diff_runner&.run || []
+
+      summary_entries = [
+        Guardrails::Report::Summary::Entry.new(
+          category: "raw_color", count: violations.count { |v| v.type == :raw_color },
+          severity: :error, auto_fix: true
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "tailwind_arbitrary", count: violations.count { |v| v.type == :tailwind_arbitrary },
+          severity: :error, auto_fix: true
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "inline_style", count: violations.count { |v| v.type == :inline_style },
+          severity: :warning
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "helper_recommended", count: violations.count { |v| v.type == :helper_recommended },
+          severity: :warning
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "a11y (static)", count: a11y.length, severity: :error
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "a11y (deep)", count: a11y_deep.length, severity: :error
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "stimulus orphaned", count: stimulus.orphaned.length, severity: :warning
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "stimulus dead", count: stimulus.dead.length, severity: :warning
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "missing previews", count: vc.missing_previews.length, severity: :warning
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "orphan slots", count: vc.orphan_slots.length, severity: :warning
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "visual diff", count: visual_diff.length, severity: :error
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "similar partials", count: similarity.length, severity: :suggestion,
+          unit: "pairs", action: "consider deduplicating"
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "cross-codebase patterns", count: patterns.length, severity: :suggestion,
+          unit: "candidates", action: "consider extracting partials"
+        ),
+        Guardrails::Report::Summary::Entry.new(
+          category: "class-itis", count: classitis.length, severity: :suggestion,
+          unit: "clusters", action: "consider extracting component / @apply"
+        )
+      ]
+
+      Guardrails::Report::Summary.new(entries: summary_entries, output: $stdout).render
+      $stdout.write sink.string
     end
 
     # Deep a11y findings only fail the audit when their impact crosses

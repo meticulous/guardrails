@@ -111,7 +111,7 @@ RSpec.describe Guardrails::A11yDeep do
 
         findings = described_class.new(input: path, output: output).run
         expect(findings.length).to eq(3)
-        expect(output.string).to include("Guardrails a11y (deep): 3 findings from axe-core")
+        expect(output.string).to include("a11y deep (3 findings from axe-core)")
         expect(output.string).to include("http://localhost:3000/")
         expect(output.string).to include("[serious] color-contrast")
         expect(output.string).to include("(.btn-primary)")
