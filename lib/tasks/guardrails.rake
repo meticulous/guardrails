@@ -18,8 +18,10 @@ namespace :guardrails do
     require "guardrails/a11y_audit"
     require "guardrails/cross_codebase_patterns"
     require "guardrails/class_itis"
+    require "guardrails/a11y_deep"
     require "stringio"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+    axe_json_path = ENV["AXE_JSON"]
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
     apply = %w[1 true yes].include?(ENV["APPLY"]&.downcase)
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
@@ -49,6 +51,8 @@ namespace :guardrails do
       patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
       classitis_opts[:output] = sink
       classitis = Guardrails::ClassItis.new(**classitis_opts).run
+      a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path, output: sink) : nil
+      a11y_deep = a11y_deep_runner&.run || []
 
       require "json"
       payload = {
@@ -60,6 +64,7 @@ namespace :guardrails do
           missing_previews: vc.missing_previews.length,
           orphan_slots: vc.orphan_slots.length,
           a11y: a11y.length,
+          a11y_deep: a11y_deep.length,
           patterns: patterns.length,
           classitis: classitis.length
         },
@@ -71,6 +76,7 @@ namespace :guardrails do
           orphan_slots: vc.orphan_slots.map(&:to_h)
         },
         a11y: a11y.map(&:to_h),
+        a11y_deep: a11y_deep.map(&:to_h),
         patterns: patterns.map { |p|
           { fingerprint: p.fingerprint, shape: p.shape, size: p.size, count: p.count, occurrences: p.occurrences.map(&:to_h) }
         },
@@ -89,9 +95,25 @@ namespace :guardrails do
       a11y = Guardrails::A11yAudit.new(root: root).run
       patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
       classitis = Guardrails::ClassItis.new(**classitis_opts).run
+      a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path) : nil
+      a11y_deep = a11y_deep_runner&.run || []
     end
 
-    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any?
+    # Deep a11y findings only fail the audit when their impact crosses
+    # the configured threshold (default: any impact fails, same as
+    # static a11y). When AXE_JSON is not set, a11y_deep is [] and the
+    # check is a no-op.
+    a11y_deep_failing = a11y_deep_runner&.any_failing?(a11y_deep) || false
+    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any? || a11y_deep_failing
+  end
+
+  desc "Parse axe-core JSON output and report deep a11y findings (AXE_JSON=path/to/axe.json)"
+  task :"a11y:deep" do
+    require "guardrails/a11y_deep"
+    path = ENV["AXE_JSON"] or abort "Set AXE_JSON=path/to/axe.json (output from `npx @axe-core/cli ... --save`)"
+    runner = Guardrails::A11yDeep.new(input: path)
+    findings = runner.run
+    exit 1 if runner.any_failing?(findings)
   end
 
   desc "Generate SVG icon sprite and audit icon usage"

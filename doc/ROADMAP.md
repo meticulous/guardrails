@@ -1,6 +1,6 @@
 # Guardrails — Roadmap
 
-**Status:** V0 finished, V1 mostly shipped (Lookbook auto-registration shipped 0.5.0), V2 2/3 done (cross-codebase patterns + class-itis)
+**Status:** V0 finished, V1 mostly shipped (Lookbook auto-registration shipped 0.5.0, deep a11y shipped 0.6.0; sample-app boot remains), V2 2/3 done (cross-codebase patterns + class-itis)
 **Last updated:** 2026-05-10
 
 ## Context
@@ -99,7 +99,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | Component-shape similarity | ✅ shipped | n-gram Jaccard, default threshold 0.7. PartialSimilarity scans both `_*.html.erb` partials and `*_component.html.erb` VC templates |
 | Lookbook integration | ✅ shipped (0.5.0) | `Guardrails::Lookbook::ComponentReport` data API + Railtie auto-registers the `:guardrails` panel when Lookbook is loaded; partial ships inside the gem. Host can override the partial via standard view-path precedence. |
 | ERB-partial structural similarity | ✅ shipped | Same PartialSimilarity engine |
-| A11y integration | 🟡 partial | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name now skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. axe-core wrapper with `--deep` mode NOT shipped — would require Capybara + headless Chrome runtime deps. axe-core integration documented at `doc/A11Y.md` for users to wire alongside |
+| A11y integration | ✅ shipped (0.6.0) | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. **Deep mode shipped via `Guardrails::A11yDeep`** — consumes axe-core JSON output (single or multi-page) and folds findings into the unified report. `AXE_JSON=path/to/axe.json bundle exec rake guardrails:audit` or `rake guardrails:a11y:deep`. Stayed parse-only (no Capybara / headless Chrome runtime deps) per the original size constraint. |
 | `helper_recommended` detector | ✅ shipped | Flags `<button>` / `<a>` wrapping ERB output and suggests `tag.button` / `button_to` / `link_to`. Pairs with the a11y skip for the same case |
 | Targeted auto-fix | ✅ shipped | See V0 auto-fix table; tailwind_arbitrary now also auto-fixes when a `:tailwind` theme token matches |
 | Sample app in `examples/` | 🟡 partial | Fake-Rails-app directory tree (no Gemfile, no bootable server). Serves as integration-test surface and talk material; doesn't `rails server` |

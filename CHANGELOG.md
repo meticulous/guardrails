@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-10
+
+Minor release closing out V1's last 🟡 partial item — deep a11y. Pre-0.6.0, axe-core was a "wire it alongside Guardrails yourself" item, with documentation but no integration point. Now Guardrails consumes axe-core JSON output and folds runtime findings into the unified report — same exit-code semantics, same `FORMAT=json` shape — without taking on Capybara / headless Chrome runtime dependencies.
+
+### Added
+
+- **`Guardrails::A11yDeep`** — parses axe-core JSON v4 output (single-page or multi-page) and emits `Finding` structs with rule, impact, description, help URL, page URL, and CSS selector. Tolerates the common malformed-input cases (missing file, malformed JSON, page with no `violations` key, node with no `target`).
+- **`AXE_JSON=…` env variable** on `rake guardrails:audit`. When set, deep findings appear in the report, contribute to the exit code if any impact is in the failing set (default: any non-nil impact fails), and surface in `FORMAT=json` output under the new `a11y_deep` key.
+- **`rake guardrails:a11y:deep AXE_JSON=…`** — standalone task for running just the deep check, useful in CI pipelines where you want a separate step.
+
+### Rationale
+
+Bundling axe-core would require Capybara + headless Chrome as runtime deps of a static-analysis gem — a significant install-cost tax on users who don't run system tests. Consuming axe JSON sidesteps that: users run axe however they already do (`npx @axe-core/cli`, `axe-core-rspec`, `axe-puppeteer`, a CDP-driven script), and Guardrails provides the merge + report.
+
+### Changed
+
+- **`doc/A11Y.md`** updated with a new "Deep a11y via axe-core JSON" section showing the integration shape and the standalone task.
+
+[0.6.0]: https://github.com/meticulous/guardrails/releases/tag/v0.6.0
+
 ## [0.5.0] - 2026-05-10
 
 Minor release closing out V1's last 🟡 partial item — Lookbook auto-registration. Pre-0.5.0, the Lookbook panel was a documented manual wiring step (copy this initializer + this partial into your app); now the gem ships the partial and registers the panel automatically when Lookbook is loaded.
