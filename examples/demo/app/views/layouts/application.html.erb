@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Guardrails demo</title>
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= javascript_importmap_tags %>
+  </head>
+  <body>
+    <main>
+      <nav>
+        <a href="<%= root_path %>">Clean</a> ·
+        <a href="<%= broken_path %>">Broken</a> ·
+        <a href="/rails/lookbook">Lookbook</a>
+      </nav>
+      <hr>
+      <%= yield %>
+    </main>
+  </body>
+</html>

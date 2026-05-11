@@ -9,9 +9,9 @@ module Guardrails
     # at app boot when `defined?(::Lookbook)`, so users no longer need to
     # wire the panel by hand.
     #
-    # Extracted from the Railtie so the registration logic is unit-testable
-    # without booting Rails — pass a stub `config` and the assertions can
-    # inspect what the panel block does.
+    # Extracted from the Railtie so the registration logic and the
+    # locals lambda are unit-testable without booting Rails — pass a
+    # stub `lookbook` and the assertions can inspect what got registered.
     module PanelRegistration
       module_function
 
@@ -21,9 +21,9 @@ module Guardrails
       # without users having to copy it into their app.
       VIEW_PATH = File.expand_path("views", __dir__)
 
-      def register!(config: ::Rails.application.config, view_consumer: nil)
+      def register!(lookbook: ::Lookbook, view_consumer: nil)
         append_view_path(view_consumer)
-        register_panel(config)
+        register_panel(lookbook)
       end
 
       # APPEND, not prepend — the host's `app/views` must keep precedence
@@ -37,39 +37,56 @@ module Guardrails
         target.append_view_path(VIEW_PATH)
       end
 
-      # Adds the `:guardrails` panel to Lookbook's preview inspector. The
-      # panel's locals lambda is evaluated per-render: it resolves the
-      # current preview's component class name and runs ComponentReport
-      # against it. `findings` is `nil` when the component class can't be
-      # located (the partial handles that gracefully).
-      def register_panel(config)
-        return unless config.respond_to?(:lookbook)
+      # Lookbook 2.x exposes `Lookbook.add_panel(name, partial_path, opts)`
+      # at the module level. opts[:locals] can be a callable that receives
+      # the inspector_data Store at render time and returns a Hash of
+      # locals for the partial. The pre-2.x API of
+      # `config.lookbook.preview_inspector.panels.add` doesn't exist.
+      def register_panel(lookbook = ::Lookbook)
+        return unless lookbook.respond_to?(:add_panel)
 
-        panels = config.lookbook.preview_inspector.panels
-        panels.add(:guardrails) do |panel|
-          panel.label = "Guardrails"
-          panel.partial = "lookbook_panels/guardrails"
-          panel.locals = ->(data) { { findings: report_for_preview(data) } }
-        end
+        lookbook.add_panel(:guardrails, "lookbook_panels/guardrails", {
+          label: "Guardrails",
+          locals: ->(data) { { findings: report_for_preview(data) } }
+        })
       end
 
       def report_for_preview(data)
         preview_class_name = preview_class_name_from(data)
         return nil unless preview_class_name
 
-        ComponentReport.new(root: ::Rails.root).for(preview_class_name)
+        component_class_name = component_class_name_from(preview_class_name)
+        return nil unless component_class_name
+
+        ComponentReport.new(root: ::Rails.root).for(component_class_name)
       end
 
-      # Lookbook's panel block hands the locals lambda a data object whose
-      # API has shifted across versions. Probe defensively rather than
-      # hardcoding one path.
+      # Lookbook's inspector_data exposes the current preview's class via
+      # data.preview.preview_class_name (2.x) or data.preview.preview_class.name
+      # (older). Probe defensively rather than hardcoding one path.
       def preview_class_name_from(data)
         return nil if data.nil?
-        if data.respond_to?(:preview) && data.preview.respond_to?(:preview_class)
-          data.preview.preview_class.name
-        elsif data.respond_to?(:preview_class)
-          data.preview_class.name
+
+        if data.respond_to?(:preview) && data.preview
+          preview = data.preview
+          return preview.preview_class_name if preview.respond_to?(:preview_class_name)
+          return preview.preview_class.name if preview.respond_to?(:preview_class)
         end
+        return data.preview_class.name if data.respond_to?(:preview_class)
+
+        nil
+      end
+
+      # The preview class for a ViewComponent is conventionally
+      # `<Component>Preview` — Lookbook itself relies on this in
+      # `PreviewEntity#guess_render_targets`. Strip the suffix to get
+      # the component class name ComponentReport expects. If there's
+      # no `Preview` suffix we can't infer the target component, so
+      # we punt rather than guess.
+      def component_class_name_from(preview_class_name)
+        return nil unless preview_class_name.to_s.end_with?("Preview")
+
+        preview_class_name.to_s.chomp("Preview")
       end
     end
   end

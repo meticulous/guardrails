@@ -1,0 +1,11 @@
+# Runtime artifacts — only the structural skeleton is tracked.
+/log/*
+!/log/.keep
+/tmp/*
+!/tmp/.keep
+/tmp/pids/*
+!/tmp/pids/.keep
+/storage/*
+!/storage/.keep
+/.bundle
+/node_modules
