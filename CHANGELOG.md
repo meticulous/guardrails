@@ -21,7 +21,7 @@ First release published to [RubyGems.org](https://rubygems.org/gems/guardrails).
 
 ### Changed
 
-- Nothing functionally relative to 0.8.0. Same 459 examples, same detector behavior, same CLI surface.
+- Nothing functionally different from 0.8.0. Same 459 examples, same detector behavior, same CLI surface.
 - README pin shifts from `github: "meticulous/guardrails", tag: "v0.8.0"` to `"~> 1.0"` now that the gem is on RubyGems.
 
 ### Stability commitment

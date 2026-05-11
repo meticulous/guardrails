@@ -1,22 +1,27 @@
 name: Release to RubyGems
 
-# Triggers on annotated tag pushes matching `vX.Y.Z`. The release flow
-# expects: (1) version bump committed and merged to main, (2) tag
-# `vX.Y.Z` created against the merge commit, (3) tag pushed.
+# Triggers on tag pushes matching `vX.Y.Z`. The release flow expects:
+# (1) version bump committed and merged to main, (2) tag `vX.Y.Z`
+# created against the merge commit (we use annotated tags by
+# convention: `git tag -a vX.Y.Z -m '…'`), (3) tag pushed.
 #
 # Once the trusted publisher is configured on rubygems.org (see
 # doc/PUBLISHING.md), no API key or secret is needed — RubyGems
 # authenticates via the GitHub OIDC token this job mints.
-#
-# Security note: no untrusted user input (issue titles, PR bodies,
-# comment text) is interpolated into any `run:` block — the only
-# externally-driven value is GITHUB_REF, which is controlled by the
-# tag pusher (a maintainer with repo write access). Tag names are
-# also constrained by the `tags: ['v*']` filter above.
 on:
   push:
     tags:
       - "v*"
+
+# Security note: no untrusted user input (issue titles, PR bodies,
+# comment text) is interpolated into any `run:` block. The only
+# externally-driven value is GITHUB_REF_NAME (used below to derive
+# the tag name) — controlled by whoever pushed the tag, which is
+# constrained to maintainers with repo write access AND further
+# constrained by the `tags: ['v*']` filter on the trigger defined
+# above. Third-party actions are pinned to commit SHAs to reduce
+# supply-chain risk if a floating tag is moved or compromised;
+# rotate during routine maintenance.
 
 jobs:
   release:
@@ -39,28 +44,33 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@c4e5b1316158f92e3d49443a9d58b31d25ac0f8f # v1 branch head as of 2026-05-11
         with:
           ruby-version: "3.2"
           bundler-cache: true
 
       # Belt-and-braces: refuse to publish a tag whose version doesn't
-      # match the gemspec. Without this, a stray `git tag v0.9.0` against
-      # a 0.8.0 lib/guardrails/version.rb would publish the wrong
-      # artifact to a slot you can never re-use. Runs before tests so
-      # the failure mode is fast. GITHUB_REF is a built-in env var
-      # (not user input); shell parameter expansion strips the prefix.
-      - name: Verify gemspec version matches tag
+      # match `Guardrails::VERSION` (which becomes `spec.version` via
+      # the gemspec). Without this, a stray `git tag v1.0.1` against a
+      # `1.0.0` lib/guardrails/version.rb would publish the wrong
+      # artifact to a slot you can never re-use (yanked versions can't
+      # be republished under the same number). Runs before tests so
+      # the failure mode is fast.
+      #
+      # GITHUB_REF_NAME is the tag name without the `refs/tags/` prefix
+      # — tag-pusher-controlled but constrained to maintainers per the
+      # trigger filter.
+      - name: Verify Guardrails::VERSION matches tag
         run: |
           GEM_VERSION="$(ruby -Ilib -e 'require "guardrails/version"; puts Guardrails::VERSION')"
-          TAG="${GITHUB_REF#refs/tags/v}"
+          TAG="${GITHUB_REF_NAME#v}"
           if [ "$GEM_VERSION" != "$TAG" ]; then
-            echo "::error::Gemspec version ($GEM_VERSION) does not match tag ($TAG). Refusing to publish."
+            echo "::error::Guardrails::VERSION ($GEM_VERSION) does not match tag (v$TAG). Refusing to publish."
             exit 1
           fi
           echo "Releasing guardrails $GEM_VERSION (tag v$TAG)"
@@ -74,4 +84,4 @@ jobs:
       # root and only pushes if rubygems.org accepts the OIDC claim
       # against a registered (or pending) trusted publisher.
       - name: Build and push to RubyGems.org
-        uses: rubygems/release-gem@v1
+        uses: rubygems/release-gem@6317d8d1f7e28c24d28f6eff169ea854948bd9f7 # v1.2.0

@@ -35,9 +35,11 @@ git pull --ff-only
 grep VERSION lib/guardrails/version.rb
 head -20 CHANGELOG.md
 
-# Tag the merge commit and push the tag
-git tag -a v0.9.0 -m "v0.9.0 — <short summary>"
-git push origin v0.9.0
+# Tag the merge commit and push the tag (replace X.Y.Z with the
+# version you're cutting — the next-release example would be the
+# version in lib/guardrails/version.rb on main right now).
+git tag -a vX.Y.Z -m "vX.Y.Z — <short summary>"
+git push origin vX.Y.Z
 ```
 
 The `release.yml` workflow takes over from there. Watch the run at <https://github.com/meticulous/guardrails/actions> — it'll:
@@ -53,7 +55,7 @@ The whole flow typically runs in under 90 seconds.
 
 | Failure | Likely cause |
 |---|---|
-| `Gemspec version (X.Y.Z) does not match tag (A.B.C). Refusing to publish.` | The tag points at a commit whose `lib/guardrails/version.rb` doesn't match. Re-tag against the right commit or bump the version. |
+| `Guardrails::VERSION (X.Y.Z) does not match tag (vA.B.C). Refusing to publish.` | The tag points at a commit whose `lib/guardrails/version.rb` doesn't match. Re-tag against the right commit or bump the version. |
 | Spec suite fails | Same fix as a regular CI failure — root cause whatever the spec reported. |
 | `rubygems/release-gem` fails with an OIDC error | The pending trusted publisher on rubygems.org wasn't created, the workflow filename doesn't match, or the environment name doesn't match. Double-check the form in step 3 above. |
 
@@ -71,10 +73,10 @@ If trusted publishing breaks for any reason, the gem can still be published manu
    # ---
    # :rubygems_api_key: rubygems_xxxxxxxxxxxxxxxxxxxxxxxx
    ```
-3. Build and push:
+3. Build and push (`X.Y.Z` resolves to the current `Guardrails::VERSION` once `gem build` runs):
    ```bash
    gem build guardrails.gemspec
-   gem push guardrails-0.9.0.gem
+   gem push guardrails-X.Y.Z.gem
    ```
 
 This path is for emergencies only — prefer the workflow.
@@ -90,7 +92,7 @@ This path is for emergencies only — prefer the workflow.
 If a published version has a critical bug:
 
 ```bash
-gem yank guardrails -v 0.9.0
+gem yank guardrails -v X.Y.Z   # replace with the version to pull
 ```
 
 Yanking removes the version from `gem install` resolution but leaves the version slot reserved — you can't republish a yanked version number. Bump and re-release.
