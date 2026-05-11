@@ -4,7 +4,7 @@ A Rails toolset that prevents UI drift in AI-assisted applications. Static audit
 
 Built and maintained by [Meticulous](https://meticulous.com).
 
-**Current release:** 0.7.0 — V0 + V1 complete, V2 2/3 shipped (see [`doc/ROADMAP.md`](doc/ROADMAP.md)).
+**Current release:** 0.8.0 — V0 + V1 + V2 complete (see [`doc/ROADMAP.md`](doc/ROADMAP.md)).
 
 ---
 
@@ -35,7 +35,7 @@ The gem is not yet published to RubyGems — pin to the git source until it is:
 ```ruby
 # Gemfile
 group :development, :test do
-  gem "guardrails", github: "meticulous/guardrails", tag: "v0.7.0"
+  gem "guardrails", github: "meticulous/guardrails", tag: "v0.8.0"
 end
 ```
 
@@ -97,6 +97,7 @@ APPLY=1 bundle exec rake guardrails:audit
 | `guardrails:icons` | Generates an SVG sprite from `app/assets/images/icons/`, flags inline `<svg>` in views, reports unused icons. |
 | `guardrails:tokens` | Parses your color and type-scale tokens (CSS vars / SCSS vars / Tailwind v3 config / Tailwind v4 `@theme`), reports hex literals in stylesheets that should reference a token. |
 | `guardrails:a11y:deep` | Reads axe-core JSON output and folds it into the unified report. Doesn't run axe itself (no Capybara / headless Chrome runtime deps) — point it at axe output your existing tooling produces. |
+| `guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
 
 ---
 
@@ -157,6 +158,20 @@ Then scans every other stylesheet for hex literals and reports drift, matching e
 
 `Guardrails::ClassItis` groups elements by `(tag, sorted-uniq-class-list)`. Reports tuples with ≥ 5 distinct classes appearing on the same tag in ≥ 3 places — the classic AI-assisted-Rails failure mode of 8-utility soup pasted across many buttons when the codebase should have a shared component or `@apply` rule. ERB-driven class fragments are dropped; only the static portion is fingerprinted.
 
+### Visual diff via snap_diff-capybara (0.8.0)
+
+`Guardrails::VisualDiff` consumes screenshot-diff tool output and folds findings into the unified report. The shipped adapter is [`snap_diff-capybara`](https://github.com/snap-diff/snap_diff-capybara) — the Rails-native baselines-in-git visual-regression gem:
+
+```bash
+# Your existing system tests produce diffs under doc/screenshots/
+bundle exec rspec spec/system/
+
+# Fold visual-diff findings into the audit:
+VISUAL_DIFF=1 bundle exec rake guardrails:audit
+```
+
+Or standalone via `rake guardrails:visual:deep`. Parse-only — same trade as deep a11y, no Capybara/Chromium runtime deps in the gem. BackstopJS adapter tracked in [#15](https://github.com/meticulous/guardrails/issues/15). See [`doc/VISUAL-DIFF.md`](doc/VISUAL-DIFF.md).
+
 ### Deep a11y via axe-core JSON (0.6.0)
 
 `Guardrails::A11yDeep` consumes axe-core JSON output and folds findings into the unified report:
@@ -193,6 +208,8 @@ The JSON payload has a `summary:` block with finding counts per category plus pe
 | `FORMAT=json` | Emit one JSON document to stdout (all other audit output is suppressed). |
 | `FORCE=1` | Bypass `init`'s refuse-to-overwrite default. |
 | `AXE_JSON=path` | Fold axe-core findings into the unified report. |
+| `VISUAL_DIFF=1` | Fold visual-diff findings into `guardrails:audit`. Embedded installs can flip this on permanently via `Guardrails.configure { \|c\| c.visual_diff.enabled = true }`. |
+| `VISUAL_DIFF_DIR=path` / `VISUAL_DIFF_THRESHOLD=0.02` | Tune the visual-diff snap_diff adapter and mismatch threshold. |
 | `SIMILARITY_THRESHOLD=0.85` | Override the partial-similarity Jaccard threshold. |
 | `PATTERN_MIN_SIZE=8` / `PATTERN_MIN_OCCURRENCES=4` | Tune the cross-codebase pattern detector. |
 | `CLASSITIS_MIN_CLASSES=6` / `CLASSITIS_MIN_OCCURRENCES=4` | Tune the class-itis detector. |
@@ -263,7 +280,7 @@ guardrails:
 
 - **V0** (foundation) — ✅ shipped
 - **V1** (polish + ecosystem) — ✅ shipped
-- **V2** (advanced) — 2/3 shipped (cross-codebase patterns, class-itis); visual-diff integration parked until auto-fix matures and a stable visual-regression target is chosen
+- **V2** (advanced) — ✅ shipped (cross-codebase patterns, class-itis, visual diff via snap_diff-capybara)
 
 Full status table and decision log: [`doc/ROADMAP.md`](doc/ROADMAP.md).
 
@@ -273,7 +290,7 @@ Full status table and decision log: [`doc/ROADMAP.md`](doc/ROADMAP.md).
 
 ```bash
 bundle install
-bundle exec rspec        # 423 examples
+bundle exec rspec        # 453 examples
 ```
 
 Real-world signal lives in `examples/demo` (integration spec) and in the dogfood patches against four real codebases (Patchvault, Talos, Forem, Avo — see `CHANGELOG.md` for what each round caught).

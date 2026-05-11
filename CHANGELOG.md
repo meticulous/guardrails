@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-11
+
+Minor release closing V2's third and last item — visual-diff integration. Stays parse-only (no Capybara / Chromium / Playwright runtime deps) following the same trade as 0.6.0's `A11yDeep`. Also introduces `Guardrails::Configuration` as the embedded-install Ruby-level config surface.
+
+### Added
+
+- **`Guardrails::VisualDiff` audit** with a `snap_diff` adapter for `snap_diff-capybara` (the Rails-native, baselines-in-git visual-regression gem). Walks the configured screenshots directory, pairs `<name>.diff.png` files with their `<name>.png` baselines, and emits normalized `Finding` structs. `.heatmap.diff.png` files are excluded as visualization companions.
+- **`Guardrails::Configuration` singleton** with `Guardrails.configure { |c| ... }` block. Initial scope is the new `visual_diff` section; existing detectors continue using their constructor-injected config + `guardrails.yml` pattern (migration is a separate refactor). Precedence: env vars > Configuration block > `guardrails.yml` > built-in defaults.
+- **`rake guardrails:visual:deep` standalone task** for CI pipelines that want a separate visual-diff step. Always runs regardless of `Configuration#visual_diff.enabled` (the task implies opt-in).
+- **`VISUAL_DIFF=1` env on `rake guardrails:audit`** folds visual-diff into the unified report (text + JSON). `VISUAL_DIFF_DIR` and `VISUAL_DIFF_THRESHOLD` override the configured paths / threshold per invocation.
+- **`doc/VISUAL-DIFF.md`** — install/config/CI walkthrough, including the embedded vs sidecar split.
+- **`doc/RESEARCH-visual-diff.md`** — the pre-implementation evaluation memo that drove the adapter choice (kept in the repo as decision history).
+
+### Notes & limits
+
+- **snap_diff adapter is binary at the filesystem layer.** Findings emit `mismatch_ratio: nil`, treated as "unconditionally failing". `VISUAL_DIFF_THRESHOLD` is currently meaningful only for adapters that emit numeric ratios. When snap_diff-capybara upstream adds a JSON companion, mismatch percentages will flow through unchanged.
+- **BackstopJS adapter** tracked separately in [issue #15](https://github.com/meticulous/guardrails/issues/15) — covers the non-Rails-monolith case.
+- **Lookbook panel visual-diff column** intentionally deferred to a later release. `ComponentReport#for` can be extended to surface per-component baseline mismatches alongside drift findings; out of scope for 0.8.0 to keep the PR focused.
+
+### Roadmap impact
+
+V2 is now ✅ end-to-end:
+
+| Item | Status |
+|---|---|
+| Cross-codebase pattern detection | ✅ 0.3.0 |
+| Class-itis reduction | ✅ 0.4.0 |
+| Visual-diff integration | ✅ 0.8.0 |
+
+[0.8.0]: https://github.com/meticulous/guardrails/releases/tag/v0.8.0
+
 ## [0.7.0] - 2026-05-10
 
 Minor release closing the last 🟡 partial in V1 — bootable sample app. Also corrects a latent integration bug in 0.5.0's Lookbook auto-registration that wiring the demo surfaced.

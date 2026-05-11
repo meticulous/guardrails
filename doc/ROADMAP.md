@@ -1,7 +1,7 @@
 # Guardrails — Roadmap
 
-**Status:** V0 ✅, V1 ✅ (all items shipped), V2 2/3 (cross-codebase patterns + class-itis; visual diff remains)
-**Last updated:** 2026-05-10
+**Status:** V0 ✅, V1 ✅, V2 ✅ (all items shipped — visual-diff via snap_diff-capybara landed 0.8.0)
+**Last updated:** 2026-05-11
 
 ## Context
 
@@ -112,7 +112,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 |---|---|---|
 | Cross-codebase pattern detection | ✅ shipped (0.3.0) | `Guardrails::CrossCodebasePatterns` — fingerprints element subtree shapes, surfaces shapes appearing 3+ times across `app/views` and `app/components`. Drops redundant nested patterns dominated by an outer shape. Verified against Patchvault (24 patterns), Talos (90), Forem (50), Avo (0, expected — ViewComponent-driven). |
 | Class-itis reduction | ✅ shipped (0.4.0) | `Guardrails::ClassItis` — groups elements by `(tag, sorted-class-list)`, reports tuples with >= 5 classes appearing in >= 3 places. ERB-driven fragments are dropped; static portion only. Verified against Forem (27 clusters incl. an `<h1>` repeating 27 times), Patchvault (1), Avo (1), Talos (0 — classes mostly ERB-fragmented). |
-| Visual diff integration | ❌ pending | Screenshot tooling; revisit once auto-fix matures and a stable visual-regression target is chosen (Percy / Chromatic / homegrown). |
+| Visual diff integration | ✅ shipped (0.8.0) | `Guardrails::VisualDiff` parses screenshot-diff tool output and folds findings into the unified report. Initial adapter: snap_diff-capybara (baselines-in-git, the Rails-native default). BackstopJS adapter tracked in issue #15. Same parse-only constraint as `A11yDeep` — no Capybara / Chromium runtime deps. See `doc/VISUAL-DIFF.md` + `doc/RESEARCH-visual-diff.md`. |
 
 ---
 
