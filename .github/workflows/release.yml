@@ -52,12 +52,6 @@ jobs:
         uses: ruby/setup-ruby@c4e5b1316158f92e3d49443a9d58b31d25ac0f8f # v1 branch head as of 2026-05-11
         with:
           ruby-version: "3.2"
-          # Ruby 3.2.11 ships with bundler 2.4.19, which doesn't handle
-          # the `securerandom` default-gem conflict that surfaces when a
-          # transitive dep requires a newer securerandom than the one
-          # the stdlib ships. `bundler: latest` resolves it (>= 2.5).
-          # The v1.0.0 first-publish run caught this — see PR #18.
-          bundler: latest
           bundler-cache: true
 
       # Belt-and-braces: refuse to publish a tag whose version doesn't
@@ -84,10 +78,21 @@ jobs:
       - name: Run the test suite
         run: bundle exec rspec
 
-      # Official RubyGems trusted-publisher action. Exchanges the
-      # GitHub OIDC token for a short-lived RubyGems API key, builds
-      # the gem, and pushes. Action infers the gemspec from the repo
-      # root and only pushes if rubygems.org accepts the OIDC claim
-      # against a registered (or pending) trusted publisher.
-      - name: Build and push to RubyGems.org
-        uses: rubygems/release-gem@6317d8d1f7e28c24d28f6eff169ea854948bd9f7 # v1.2.0
+      # Two-step publish — exchange the GitHub OIDC token for a
+      # short-lived RubyGems API key, then `gem build` + `gem push`
+      # directly. We don't use rubygems/release-gem (the "all in one"
+      # wrapper) because it invokes `bundle exec rake release` under
+      # an attestation-patch RUBYOPT, which activates the stdlib's
+      # securerandom default gem before bundler resolves and conflicts
+      # with any transitive dep that wants a newer securerandom — what
+      # tanked the v1.0.0 first-publish attempts (workflow runs
+      # 25679243892 and 25679904207). The direct approach avoids
+      # bundler entirely on the push path.
+      - name: Configure RubyGems trusted-publisher credentials
+        uses: rubygems/configure-rubygems-credentials@762a4b77c3300434bb57c7ce80b20e36231927aa # v2.0.0
+
+      - name: Build gem
+        run: gem build guardrails.gemspec
+
+      - name: Push to RubyGems.org
+        run: gem push guardrails-*.gem
