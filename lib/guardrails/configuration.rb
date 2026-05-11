@@ -10,18 +10,23 @@ module Guardrails
   #       c.visual_diff.snap_diff_dir = "spec/screenshots"
   #     end
   #
-  # Precedence across config sources (highest → lowest):
+  # Precedence for the `visual_diff` section (highest → lowest):
   #
-  #   1. Environment variables (runtime overrides — same env vars
-  #      sidecar-mode users already rely on)
+  #   1. Environment variables (`VISUAL_DIFF=1`, `VISUAL_DIFF_DIR=…`,
+  #      `VISUAL_DIFF_THRESHOLD=…` — same env vars sidecar-mode users
+  #      already rely on)
   #   2. `Guardrails.configure` block (embedded-mode initializer)
-  #   3. `guardrails.yml` (file-based, both modes — existing surface)
-  #   4. Built-in defaults
+  #   3. Built-in defaults (`enabled: false`, `adapter: :snap_diff`,
+  #      `snap_diff_dir: "doc/screenshots"`, `threshold: 0.0`)
+  #
+  # `guardrails.yml` does NOT participate in this object's precedence
+  # yet — that's how existing detectors (Audit, Tokens, etc.) read
+  # their config, and migrating them onto `Guardrails::Configuration`
+  # is a separate refactor not in 0.8.0 scope.
   #
   # In 0.8.0 the only section is `visual_diff`. Existing detectors
   # continue using their constructor-injected configuration + yml
-  # access pattern — migrating them onto this object is a separate
-  # refactor (see issue #15 follow-up scope).
+  # access pattern.
   class Configuration
     attr_reader :visual_diff
 
@@ -52,6 +57,9 @@ module Guardrails
       end
 
       def adapter=(value)
+        raise ArgumentError, "visual_diff.adapter cannot be nil" if value.nil?
+        raise ArgumentError, "visual_diff.adapter cannot be blank" if value.respond_to?(:strip) && value.strip.empty?
+
         sym = value.to_sym
         unless KNOWN_ADAPTERS.include?(sym)
           raise ArgumentError,
@@ -61,6 +69,9 @@ module Guardrails
       end
 
       def threshold=(value)
+        raise ArgumentError, "visual_diff.threshold cannot be nil" if value.nil?
+        raise ArgumentError, "visual_diff.threshold cannot be blank" if value.respond_to?(:strip) && value.strip.empty?
+
         float = Float(value)
         unless float >= 0.0 && float <= 1.0
           raise ArgumentError,

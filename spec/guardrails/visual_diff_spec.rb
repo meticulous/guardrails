@@ -146,4 +146,23 @@ RSpec.describe Guardrails::VisualDiff do
       expect { audit.collect }.to raise_error(ArgumentError, /Unknown visual_diff adapter/)
     end
   end
+
+  describe "constructor coercion" do
+    # Mirrors what Configuration setters do — passing strings from a
+    # CLI / env-var path should behave the same as setting them via
+    # Guardrails.configure.
+    it "coerces a string adapter to a symbol" do
+      write_screenshot "homepage.png"
+      write_screenshot "homepage.diff.png"
+
+      audit = described_class.new(root: root, output: output, adapter: "snap_diff")
+      expect(audit.collect.length).to eq(1)
+    end
+
+    it "coerces a string threshold to a Float" do
+      f = described_class::Finding.new(scenario: "x", mismatch_ratio: 0.05)
+      audit = described_class.new(root: root, output: output, threshold: "0.10")
+      expect(audit.any_failing?([f])).to be false
+    end
+  end
 end

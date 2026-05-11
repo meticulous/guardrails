@@ -29,7 +29,9 @@ VISUAL_DIFF_DIR=spec/screenshots bundle exec rake guardrails:visual:deep
 To tolerate small mismatches (when the adapter emits a numeric ratio — snap_diff currently emits only a binary pass/fail, see "Adapter limits" below):
 
 ```bash
-VISUAL_DIFF_THRESHOLD=0.02 bundle exec rake guardrails:audit
+# VISUAL_DIFF=1 still needs to be set — VISUAL_DIFF_THRESHOLD alone
+# doesn't enable the check, just tunes it.
+VISUAL_DIFF=1 VISUAL_DIFF_THRESHOLD=0.02 bundle exec rake guardrails:audit
 ```
 
 ## Configuration

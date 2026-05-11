@@ -30,8 +30,15 @@ namespace :guardrails do
     # Rails initializer (embedded mode). Env overrides Configuration.
     visual_diff_env = %w[1 true yes].include?(ENV["VISUAL_DIFF"]&.downcase)
     visual_diff_on = visual_diff_env || Guardrails.configuration.visual_diff.enabled
-    Guardrails.configure { |c| c.visual_diff.snap_diff_dir = ENV["VISUAL_DIFF_DIR"] } if ENV["VISUAL_DIFF_DIR"]
-    Guardrails.configure { |c| c.visual_diff.threshold = ENV["VISUAL_DIFF_THRESHOLD"] } if ENV["VISUAL_DIFF_THRESHOLD"]
+    # Strip + reject blank env values — an empty VISUAL_DIFF_DIR would
+    # otherwise be applied as snap_diff_dir = "" and glob from the repo
+    # root (potentially scanning the whole tree).
+    if (dir = ENV["VISUAL_DIFF_DIR"]) && !dir.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.snap_diff_dir = dir.strip }
+    end
+    if (thr = ENV["VISUAL_DIFF_THRESHOLD"]) && !thr.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.threshold = thr.strip }
+    end
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
     apply = %w[1 true yes].include?(ENV["APPLY"]&.downcase)
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
@@ -141,8 +148,13 @@ namespace :guardrails do
     # The standalone task implies the user is opting in regardless of
     # Configuration; flip enabled on so a no-config sidecar run works.
     Guardrails.configure { |c| c.visual_diff.enabled = true }
-    Guardrails.configure { |c| c.visual_diff.snap_diff_dir = ENV["VISUAL_DIFF_DIR"] } if ENV["VISUAL_DIFF_DIR"]
-    Guardrails.configure { |c| c.visual_diff.threshold = ENV["VISUAL_DIFF_THRESHOLD"] } if ENV["VISUAL_DIFF_THRESHOLD"]
+    # Same blank-env guard as the main audit task — see note there.
+    if (dir = ENV["VISUAL_DIFF_DIR"]) && !dir.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.snap_diff_dir = dir.strip }
+    end
+    if (thr = ENV["VISUAL_DIFF_THRESHOLD"]) && !thr.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.threshold = thr.strip }
+    end
     runner = Guardrails::VisualDiff.new(root: root)
     findings = runner.run
     exit 1 if runner.any_failing?(findings)

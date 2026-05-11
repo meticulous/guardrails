@@ -40,8 +40,12 @@ module Guardrails
       @root = Pathname(root)
       @output = output
       cfg = Guardrails.configuration.visual_diff
-      @adapter_name = adapter || cfg.adapter
-      @threshold = threshold.nil? ? cfg.threshold : threshold
+      # Coerce constructor inputs the same way Configuration setters
+      # do, so `VisualDiff.new(adapter: "snap_diff", threshold: "0.1")`
+      # works the same as `Guardrails.configure { |c| c.visual_diff.
+      # adapter = "snap_diff"; c.visual_diff.threshold = "0.1" }`.
+      @adapter_name = coerce_adapter(adapter) || cfg.adapter
+      @threshold = threshold.nil? ? cfg.threshold : Float(threshold)
     end
 
     def run
@@ -74,6 +78,12 @@ module Guardrails
       else
         raise ArgumentError, "Unknown visual_diff adapter: #{@adapter_name.inspect}"
       end
+    end
+
+    def coerce_adapter(value)
+      return nil if value.nil?
+
+      value.to_sym
     end
 
     def failing?(finding)

@@ -70,6 +70,15 @@ RSpec.describe Guardrails::Configuration do
     it "rejects unknown adapters with a helpful error" do
       expect { vd.adapter = :percy }.to raise_error(ArgumentError, /Unknown visual_diff adapter :percy/)
     end
+
+    it "rejects nil with a clear ArgumentError (not NoMethodError on to_sym)" do
+      expect { vd.adapter = nil }.to raise_error(ArgumentError, /cannot be nil/)
+    end
+
+    it "rejects a blank string" do
+      expect { vd.adapter = "" }.to raise_error(ArgumentError, /cannot be blank/)
+      expect { vd.adapter = "   " }.to raise_error(ArgumentError, /cannot be blank/)
+    end
   end
 
   describe "visual_diff.threshold=" do
@@ -100,6 +109,15 @@ RSpec.describe Guardrails::Configuration do
 
     it "rejects non-numeric strings" do
       expect { vd.threshold = "not a number" }.to raise_error(ArgumentError)
+    end
+
+    it "rejects nil with a clear ArgumentError (not TypeError on Float)" do
+      expect { vd.threshold = nil }.to raise_error(ArgumentError, /cannot be nil/)
+    end
+
+    it "rejects a blank string" do
+      expect { vd.threshold = "" }.to raise_error(ArgumentError, /cannot be blank/)
+      expect { vd.threshold = "   " }.to raise_error(ArgumentError, /cannot be blank/)
     end
   end
 end

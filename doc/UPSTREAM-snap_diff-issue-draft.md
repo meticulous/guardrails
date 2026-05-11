@@ -1,6 +1,9 @@
 # Upstream issue draft — snap_diff-capybara JSON report companion
 
-> Not filed yet. For sign-off before posting at <https://github.com/snap-diff/snap_diff-capybara/issues/new>. Delete this file after the issue is filed.
+> Persistent draft for the ask Guardrails wants to make of snap_diff-capybara upstream: add a JSON companion to the HTML report so mismatch ratios flow through. Kept in-repo as decision/communication history regardless of whether the upstream issue has been filed (and what its status is). If filed, link the resulting upstream issue here.
+>
+> **Upstream issue status:** _not yet filed (awaiting sign-off)._
+> **Target repo:** <https://github.com/snap-diff/snap_diff-capybara/issues/new>
 
 ---
 
