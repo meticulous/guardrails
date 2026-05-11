@@ -19,9 +19,26 @@ namespace :guardrails do
     require "guardrails/cross_codebase_patterns"
     require "guardrails/class_itis"
     require "guardrails/a11y_deep"
+    require "guardrails/visual_diff"
     require "stringio"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     axe_json_path = ENV["AXE_JSON"]
+
+    # Visual-diff is opt-in (baselines need deliberate setup). Enabled
+    # when either VISUAL_DIFF=1 is set in the env (sidecar mode) or
+    # Guardrails.configuration.visual_diff.enabled was flipped on by a
+    # Rails initializer (embedded mode). Env overrides Configuration.
+    visual_diff_env = %w[1 true yes].include?(ENV["VISUAL_DIFF"]&.downcase)
+    visual_diff_on = visual_diff_env || Guardrails.configuration.visual_diff.enabled
+    # Strip + reject blank env values — an empty VISUAL_DIFF_DIR would
+    # otherwise be applied as snap_diff_dir = "" and glob from the repo
+    # root (potentially scanning the whole tree).
+    if (dir = ENV["VISUAL_DIFF_DIR"]) && !dir.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.snap_diff_dir = dir.strip }
+    end
+    if (thr = ENV["VISUAL_DIFF_THRESHOLD"]) && !thr.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.threshold = thr.strip }
+    end
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
     apply = %w[1 true yes].include?(ENV["APPLY"]&.downcase)
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
@@ -53,6 +70,8 @@ namespace :guardrails do
       classitis = Guardrails::ClassItis.new(**classitis_opts).run
       a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path, output: sink) : nil
       a11y_deep = a11y_deep_runner&.run || []
+      visual_diff_runner = visual_diff_on ? Guardrails::VisualDiff.new(root: root, output: sink) : nil
+      visual_diff = visual_diff_runner&.run || []
 
       require "json"
       payload = {
@@ -66,7 +85,8 @@ namespace :guardrails do
           a11y: a11y.length,
           a11y_deep: a11y_deep.length,
           patterns: patterns.length,
-          classitis: classitis.length
+          classitis: classitis.length,
+          visual_diff: visual_diff.length
         },
         violations: violations.map(&:to_h),
         stimulus: { orphaned: stimulus.orphaned, dead: stimulus.dead },
@@ -82,7 +102,8 @@ namespace :guardrails do
         },
         classitis: classitis.map { |c|
           { tag: c.tag, classes: c.classes, count: c.count, occurrences: c.occurrences.map(&:to_h) }
-        }
+        },
+        visual_diff: visual_diff.map(&:to_h)
       }
       $stdout.puts JSON.pretty_generate(payload)
     else
@@ -97,14 +118,18 @@ namespace :guardrails do
       classitis = Guardrails::ClassItis.new(**classitis_opts).run
       a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path) : nil
       a11y_deep = a11y_deep_runner&.run || []
+      visual_diff_runner = visual_diff_on ? Guardrails::VisualDiff.new(root: root) : nil
+      visual_diff = visual_diff_runner&.run || []
     end
 
     # Deep a11y findings only fail the audit when their impact crosses
     # the configured threshold (default: any impact fails, same as
     # static a11y). When AXE_JSON is not set, a11y_deep is [] and the
-    # check is a no-op.
+    # check is a no-op. Same logic for visual_diff: opt-in via
+    # VISUAL_DIFF=1 / Configuration; threshold gates failure.
     a11y_deep_failing = a11y_deep_runner&.any_failing?(a11y_deep) || false
-    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any? || a11y_deep_failing
+    visual_diff_failing = visual_diff_runner&.any_failing?(visual_diff) || false
+    exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any? || a11y_deep_failing || visual_diff_failing
   end
 
   desc "Parse axe-core JSON output and report deep a11y findings (AXE_JSON=path/to/axe.json)"
@@ -112,6 +137,25 @@ namespace :guardrails do
     require "guardrails/a11y_deep"
     path = ENV["AXE_JSON"] or abort "Set AXE_JSON=path/to/axe.json (output from `npx @axe-core/cli ... --save`)"
     runner = Guardrails::A11yDeep.new(input: path)
+    findings = runner.run
+    exit 1 if runner.any_failing?(findings)
+  end
+
+  desc "Consume screenshot-diff output and report visual regressions (VISUAL_DIFF_DIR=..., VISUAL_DIFF_THRESHOLD=0.0)"
+  task :"visual:deep" do
+    require "guardrails/visual_diff"
+    root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+    # The standalone task implies the user is opting in regardless of
+    # Configuration; flip enabled on so a no-config sidecar run works.
+    Guardrails.configure { |c| c.visual_diff.enabled = true }
+    # Same blank-env guard as the main audit task — see note there.
+    if (dir = ENV["VISUAL_DIFF_DIR"]) && !dir.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.snap_diff_dir = dir.strip }
+    end
+    if (thr = ENV["VISUAL_DIFF_THRESHOLD"]) && !thr.strip.empty?
+      Guardrails.configure { |c| c.visual_diff.threshold = thr.strip }
+    end
+    runner = Guardrails::VisualDiff.new(root: root)
     findings = runner.run
     exit 1 if runner.any_failing?(findings)
   end

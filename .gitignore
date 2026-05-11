@@ -1,6 +1,7 @@
 *.gem
 *.rbc
 .bundle/
+.claude/
 .rspec_status
 coverage/
 Gemfile.lock
