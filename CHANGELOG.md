@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-10
+
+Minor release adding the **class-itis** detector — the second V2 audit. Surfaces the AI-assisted-Rails failure mode of identical multi-class utility soup copy-pasted onto the same tag across many views, when the codebase already has (or should have) a shared component or `@apply` rule for it.
+
+### Added
+
+- **`Guardrails::ClassItis` audit.** Walks every element across `app/views` and `app/components`, groups by `(tag, sorted-class-list)`, and reports tuples appearing in 3+ places with at least 5 distinct classes. Class lists are sorted + uniq'd so a re-ordered or repeat-token attribute doesn't fragment or inflate the count.
+- **ERB-aware extraction.** Only the static portion of `class="..."` is fingerprinted; `<%= variant %>` fragments are dropped (we can't know what they'll render). Mixed-static-and-ERB attributes still surface their literal classes.
+- **Wired into `rake guardrails:audit`** in both text and JSON modes. Env overrides: `CLASSITIS_MIN_CLASSES` (default 5), `CLASSITIS_MIN_OCCURRENCES` (default 3). Findings are advisory — they do not bump the exit code, since "this class list repeats" is a refactor suggestion, not a violation.
+
+Distinct from `CrossCodebasePatterns` (which fingerprints structural element shape, ignoring classes) and `PartialSimilarity` (which Jaccard-compares whole existing partials).
+
+### Verified
+
+Real-world signal across four codebases:
+
+| Repo | Clusters | Top finding |
+|---|---|---|
+| Forem | 27 | A `<h1>` with 8 utility classes (`fs-3xl fw-bold l:fs-5xl lh-tight mb-4 mt-0 s:fs-4xl s:fw-heavy`) repeats 27 times — clean candidate for a heading partial |
+| Patchvault | 1 | A `<div class="corner-ribbon grey shadow sticky top-right">` repeats 7 times |
+| Avo | 1 | A tooltip `<div>` with 9 classes repeats 3 times (low total because Avo is ViewComponent-driven) |
+| Talos | 0 | Classes are largely ERB-fragmented (`content_tag` style), so static fingerprinting finds no exact-match repeats — confirms the detector cleanly skips dynamic class lists |
+
+[0.4.0]: https://github.com/meticulous/guardrails/releases/tag/v0.4.0
+
 ## [0.3.0] - 2026-05-10
 
 Minor release adding a new cross-codebase pattern detector. Distinct from `PartialSimilarity` (which compares existing partials to each other), this audit looks at *any* element subtree in *any* view and surfaces shapes that repeat 3+ times — concrete refactor candidates for shared partials or ViewComponents.
