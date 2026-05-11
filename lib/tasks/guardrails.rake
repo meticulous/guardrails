@@ -17,6 +17,7 @@ namespace :guardrails do
     require "guardrails/view_component_audit"
     require "guardrails/a11y_audit"
     require "guardrails/cross_codebase_patterns"
+    require "guardrails/class_itis"
     require "stringio"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
@@ -27,6 +28,9 @@ namespace :guardrails do
     pattern_opts = { root: root }
     pattern_opts[:min_size] = ENV["PATTERN_MIN_SIZE"].to_i if ENV["PATTERN_MIN_SIZE"]
     pattern_opts[:min_occurrences] = ENV["PATTERN_MIN_OCCURRENCES"].to_i if ENV["PATTERN_MIN_OCCURRENCES"]
+    classitis_opts = { root: root }
+    classitis_opts[:min_classes] = ENV["CLASSITIS_MIN_CLASSES"].to_i if ENV["CLASSITIS_MIN_CLASSES"]
+    classitis_opts[:min_occurrences] = ENV["CLASSITIS_MIN_OCCURRENCES"].to_i if ENV["CLASSITIS_MIN_OCCURRENCES"]
 
     if format == :json
       # Run sub-audits silently so the only thing printed to stdout is one
@@ -43,6 +47,8 @@ namespace :guardrails do
       a11y = Guardrails::A11yAudit.new(root: root, output: sink).run
       pattern_opts[:output] = sink
       patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
+      classitis_opts[:output] = sink
+      classitis = Guardrails::ClassItis.new(**classitis_opts).run
 
       require "json"
       payload = {
@@ -54,7 +60,8 @@ namespace :guardrails do
           missing_previews: vc.missing_previews.length,
           orphan_slots: vc.orphan_slots.length,
           a11y: a11y.length,
-          patterns: patterns.length
+          patterns: patterns.length,
+          classitis: classitis.length
         },
         violations: violations.map(&:to_h),
         stimulus: { orphaned: stimulus.orphaned, dead: stimulus.dead },
@@ -66,6 +73,9 @@ namespace :guardrails do
         a11y: a11y.map(&:to_h),
         patterns: patterns.map { |p|
           { fingerprint: p.fingerprint, shape: p.shape, size: p.size, count: p.count, occurrences: p.occurrences.map(&:to_h) }
+        },
+        classitis: classitis.map { |c|
+          { tag: c.tag, classes: c.classes, count: c.count, occurrences: c.occurrences.map(&:to_h) }
         }
       }
       $stdout.puts JSON.pretty_generate(payload)
@@ -78,6 +88,7 @@ namespace :guardrails do
       vc = Guardrails::ViewComponentAudit.new(root: root).run
       a11y = Guardrails::A11yAudit.new(root: root).run
       patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
+      classitis = Guardrails::ClassItis.new(**classitis_opts).run
     end
 
     exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any?

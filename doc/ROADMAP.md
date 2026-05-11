@@ -1,13 +1,13 @@
 # Guardrails — Roadmap
 
-**Status:** V0 finished, V1 mostly shipped (all four V1 follow-up questions resolved)
-**Last updated:** 2026-05-05
+**Status:** V0 finished, V1 mostly shipped, V2 2/3 done (cross-codebase patterns + class-itis)
+**Last updated:** 2026-05-10
 
 ## Context
 
 Guardrails is a Ruby gem that prevents UI drift in Rails apps — particularly drift introduced by AI coding assistants that generate UI faster than design-system consistency can be maintained. The gem is also the conceptual scaffolding for the Rails World talk. The talk is **concept-led, not demo-led**, so the gem is the durable artifact rather than a live-demo dependency.
 
-This doc tracks shipped vs. planned scope and parks remaining unknowns. PR #1 has merged; V0 + most of V1 landed together. V0-finish work (interactive `init` prompts, `FORCE=1`, type-scale token support, Tailwind v3 parsing, ROADMAP refresh) is on `claude/next`.
+This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + most of V1 landed in PR #1; 0.2.x patches refined detectors against four real codebases (Talos, Avo, Forem, Patchvault); 0.3.0 added cross-codebase structural pattern detection; 0.4.0 added the class-itis detector.
 
 ---
 
@@ -108,11 +108,11 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. PR #1 ha
 
 ## V2 — Advanced
 
-Untouched.
-
-- **Class-itis reduction** — `@apply` / utility-extraction suggestions, or whatever the prevailing Tailwind 4 best-practice equivalent is by ship time
-- **Cross-codebase pattern detection** — "this button shape appears 12 times — extract a component?"
-- **Visual diff integration** — screenshot tooling; revisit once auto-fix matures
+| Item | Status | Notes |
+|---|---|---|
+| Cross-codebase pattern detection | ✅ shipped (0.3.0) | `Guardrails::CrossCodebasePatterns` — fingerprints element subtree shapes, surfaces shapes appearing 3+ times across `app/views` and `app/components`. Drops redundant nested patterns dominated by an outer shape. Verified against Patchvault (24 patterns), Talos (90), Forem (50), Avo (0, expected — ViewComponent-driven). |
+| Class-itis reduction | ✅ shipped (0.4.0) | `Guardrails::ClassItis` — groups elements by `(tag, sorted-class-list)`, reports tuples with >= 5 classes appearing in >= 3 places. ERB-driven fragments are dropped; static portion only. Verified against Forem (27 clusters incl. an `<h1>` repeating 27 times), Patchvault (1), Avo (1), Talos (0 — classes mostly ERB-fragmented). |
+| Visual diff integration | ❌ pending | Screenshot tooling; revisit once auto-fix matures and a stable visual-regression target is chosen (Percy / Chromatic / homegrown). |
 
 ---
 
