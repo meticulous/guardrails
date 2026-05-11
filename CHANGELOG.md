@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-11
+
+First release published to [RubyGems.org](https://rubygems.org/gems/guardrails). The `1.0` jump from `0.8.0` recognizes that:
+
+1. **Distribution is now stable.** `gem install guardrails` and `gem "guardrails", "~> 1.0"` both work without git-tag gymnastics. RubyGems Trusted Publishing handles the release pipeline (see `doc/PUBLISHING.md`).
+2. **The originally-planned roadmap is end-to-end shipped.** V0 + V1 + V2 are all ✅:
+
+   | Phase | Status |
+   |---|---|
+   | V0 — Foundation | ✅ shipped (inline_style, raw_color, tailwind_arbitrary, helper_recommended, suggest mode, auto-fix, icons, init, tokens, stimulus, exit-code contract) |
+   | V1 — Polish + ecosystem | ✅ shipped (ViewComponent + Lookbook auto-panel, partial similarity, helper_recommended, static + deep a11y, targeted auto-fix, bootable sample app) |
+   | V2 — Advanced | ✅ shipped (cross-codebase pattern detection, class-itis, visual-diff via snap_diff-capybara) |
+
+### Changed
+
+- Nothing functionally relative to 0.8.0. Same 459 examples, same detector behavior, same CLI surface.
+- README pin shifts from `github: "meticulous/guardrails", tag: "v0.8.0"` to `"~> 1.0"` now that the gem is on RubyGems.
+
+### Stability commitment
+
+Going forward this gem follows SemVer strictly: patch (`1.0.x`) for bug fixes and refinements, minor (`1.x.0`) for additive detectors and config keys, major (`x.0.0`) only for breaking changes to the CLI / `guardrails.yml` schema / Ruby class API. The dogfood-driven patch cadence from 0.2.x continues — small surgical patches against findings from real codebases (Patchvault, Talos, Forem, Avo).
+
+### Known follow-ups (not in 1.0.0)
+
+- BackstopJS adapter for `VisualDiff` (issue #15)
+- Upstream issue with `snap_diff-capybara` requesting JSON-report emission (draft kept at `doc/UPSTREAM-snap_diff-issue-draft.md`)
+- Lookbook panel `visual_diff` column
+- Migration of existing detectors onto `Guardrails::Configuration` (today only `visual_diff` uses it)
+
+[1.0.0]: https://github.com/meticulous/guardrails/releases/tag/v1.0.0
+
 ## [0.8.0] - 2026-05-11
 
 Minor release closing V2's third and last item — visual-diff integration. Stays parse-only (no Capybara / Chromium / Playwright runtime deps) following the same trade as 0.6.0's `A11yDeep`. Also introduces `Guardrails::Configuration` as the embedded-install Ruby-level config surface.

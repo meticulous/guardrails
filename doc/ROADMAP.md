@@ -1,6 +1,6 @@
 # Guardrails — Roadmap
 
-**Status:** V0 ✅, V1 ✅, V2 ✅ (all items shipped — visual-diff via snap_diff-capybara landed 0.8.0)
+**Status:** **1.0.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (visual-diff via snap_diff-capybara landed 0.8.0; published as 1.0.0 once the trusted-publisher pipeline merged)
 **Last updated:** 2026-05-11
 
 ## Context

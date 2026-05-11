@@ -4,7 +4,7 @@ A Rails toolset that prevents UI drift in AI-assisted applications. Static audit
 
 Built and maintained by [Meticulous](https://meticulous.com).
 
-**Current release:** 0.8.0 — V0 + V1 + V2 complete (see [`doc/ROADMAP.md`](doc/ROADMAP.md)).
+**Current release:** 1.0.0 — V0 + V1 + V2 complete, published on [RubyGems.org](https://rubygems.org/gems/guardrails) (see [`doc/ROADMAP.md`](doc/ROADMAP.md)).
 
 ---
 
@@ -30,12 +30,10 @@ Guardrails works two ways: **installed in your project** (auto-loaded via a Rail
 
 ### Installed in-project (recommended)
 
-The gem is not yet published to RubyGems — pin to the git source until it is:
-
 ```ruby
 # Gemfile
 group :development, :test do
-  gem "guardrails", github: "meticulous/guardrails", tag: "v0.8.0"
+  gem "guardrails", "~> 1.0"
 end
 ```
 
