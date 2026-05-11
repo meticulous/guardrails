@@ -2,6 +2,7 @@
 
 require "json"
 require "pathname"
+require "set"
 
 module Guardrails
   # Consumes axe-core JSON output and folds the findings into Guardrails'
@@ -28,9 +29,12 @@ module Guardrails
     end
 
     # Impacts we treat as audit-failing. axe emits one of: minor, moderate,
-    # serious, critical (and sometimes nil for `incomplete` findings). The
-    # 0.6.0 default is "any impact fails" — same shape as static a11y rules
-    # which all fail unconditionally. Configurable per-call if needed.
+    # serious, critical (and sometimes nil for `incomplete` findings or
+    # custom rule packs). The 0.6.0 default is "any known non-nil impact
+    # fails" — covers axe's full impact ladder and aligns with the static
+    # a11y rules which all fail unconditionally. Findings with a nil/
+    # unknown impact do NOT fail by default; tighten per-call via
+    # `failing_impacts:` if your rule pack emits custom severities.
     DEFAULT_FAILING_IMPACTS = %w[minor moderate serious critical].freeze
 
     def initialize(input:, output: $stdout, failing_impacts: DEFAULT_FAILING_IMPACTS)
