@@ -4,12 +4,12 @@ require_relative "lib/guardrails/version"
 
 Gem::Specification.new do |spec|
   # The Ruby module is `Guardrails`; the gem on rubygems.org is
-  # `meticulous_guardrails` (the unqualified `guardrails` was rejected
+  # `ui_guardrails` (the unqualified `guardrails` was rejected
   # under RubyGems' similarity rule against `guard-rails`, an
-  # unrelated Guard plugin). Users `gem "meticulous_guardrails"` in
+  # unrelated Guard plugin). Users `gem "ui_guardrails"` in
   # their Gemfile and `require "guardrails"` in code. See CHANGELOG
   # entry for 1.0.0 for the full rationale.
-  spec.name = "meticulous_guardrails"
+  spec.name = "ui_guardrails"
   spec.version = Guardrails::VERSION
   spec.authors = ["John Athayde"]
   spec.email = ["jmpa@meticulous.com"]

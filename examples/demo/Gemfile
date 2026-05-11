@@ -29,7 +29,7 @@ gem "puma"
 
 # Guardrails itself — path dep so changes to the gem are picked up
 # without `bundle update` gymnastics.
-gem "meticulous_guardrails", path: "../.."
+gem "ui_guardrails", path: "../.."
 
 group :development do
   # Better backtraces during the inevitable demo-day hiccup.

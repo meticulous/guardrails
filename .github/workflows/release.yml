@@ -32,7 +32,7 @@ jobs:
     # rubygems.org setup form's defaults match what the workflow does.
     environment:
       name: release
-      url: https://rubygems.org/gems/meticulous_guardrails
+      url: https://rubygems.org/gems/ui_guardrails
 
     # `id-token: write` is the critical permission for trusted
     # publishing — the action mints a GitHub OIDC token RubyGems
