@@ -52,6 +52,12 @@ jobs:
         uses: ruby/setup-ruby@c4e5b1316158f92e3d49443a9d58b31d25ac0f8f # v1 branch head as of 2026-05-11
         with:
           ruby-version: "3.2"
+          # Ruby 3.2.11 ships with bundler 2.4.19, which doesn't handle
+          # the `securerandom` default-gem conflict that surfaces when a
+          # transitive dep requires a newer securerandom than the one
+          # the stdlib ships. `bundler: latest` resolves it (>= 2.5).
+          # The v1.0.0 first-publish run caught this — see PR #18.
+          bundler: latest
           bundler-cache: true
 
       # Belt-and-braces: refuse to publish a tag whose version doesn't
