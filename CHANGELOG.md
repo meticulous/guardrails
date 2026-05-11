@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-10
+
+Minor release closing the last 🟡 partial in V1 — bootable sample app. Also corrects a latent integration bug in 0.5.0's Lookbook auto-registration that wiring the demo surfaced.
+
+### Added
+
+- **`examples/demo` is now a bootable Rails 7.2 application.** `cd examples/demo && bundle install && bin/rails server` renders the seeded views at `/` (clean baseline) and `/broken` (every detector trips). Lookbook mounts at `/rails/lookbook`, with the Guardrails panel auto-registered. `bundle exec rake guardrails:audit` runs the full audit against the same tree the integration spec exercises.
+- **Minimal Rails skeleton**: `config/application.rb` loads only `action_controller` + `action_view` + `propshaft` (no ActiveRecord / ActionCable / ActionMailer — the demo doesn't persist or background anything), `config/routes.rb`, environments, `Rakefile`, `bin/rails`, `bin/setup`, `config.ru`, layout, controllers, importmap.
+- **Path-dep on the gem** in `examples/demo/Gemfile` so demo changes don't require `bundle update` gymnastics.
+
+### Fixed
+
+- **Lookbook panel registration uses the correct 2.x API.** Pre-0.7.0, `Guardrails::Lookbook::PanelRegistration#register_panel` reached for `config.lookbook.preview_inspector.panels.add(:guardrails)`, which was the documented API at an earlier Lookbook version but does not exist in Lookbook 2.x — it crashed with `undefined method 'add' for nil` against any real Lookbook install. The bug shipped in 0.5.0 because the spec only exercised stubs. Wiring the bootable demo surfaced it. The fix uses `Lookbook.add_panel(name, partial_path, opts)`, the actual module-level 2.x API, with the locals lambda receiving Lookbook's inspector data Store and resolving the component class via `data.preview.preview_class_name` (chomping the `Preview` suffix to derive the component class for `ComponentReport`).
+- **Component class name resolution.** The pre-0.7.0 locals lambda passed `preview_class.name` (e.g. `ButtonComponentPreview`) directly to `ComponentReport`, which then failed to find the component file. Now strips the `Preview` suffix per Lookbook's own `guess_render_targets` convention.
+
+### Changed
+
+- **Spec coverage**: 10 specs on `PanelRegistration` (up from 9), all rewritten against the real `Lookbook.add_panel` shape. The "appends rather than prepends" regression spec from 0.5.0 still locks the host-override contract.
+
+[0.7.0]: https://github.com/meticulous/guardrails/releases/tag/v0.7.0
+
 ## [0.6.0] - 2026-05-10
 
 Minor release closing out V1's last 🟡 partial item — deep a11y. Pre-0.6.0, axe-core was a "wire it alongside Guardrails yourself" item, with documentation but no integration point. Now Guardrails consumes axe-core JSON output and folds runtime findings into the unified report — same exit-code semantics, same `FORMAT=json` shape — without taking on Capybara / headless Chrome runtime dependencies.

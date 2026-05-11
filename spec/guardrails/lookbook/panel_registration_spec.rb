@@ -3,85 +3,87 @@
 require "guardrails/lookbook/panel_registration"
 
 RSpec.describe Guardrails::Lookbook::PanelRegistration do
-  # Lookbook's panel block exposes label / partial / locals as plain
-  # accessors, so a Struct stands in cleanly. The same shape is used
-  # both inside the capture class below and in `falls back…` further
-  # down — defined once at the top so both reuse it.
-  panel_struct = Struct.new(:label, :partial, :locals)
-
-  # Captures `panels.add(:guardrails) { |panel| ... }` invocations.
-  panels_capture = Class.new do
-    define_method(:initialize) { @registered = {} }
+  # Captures `Lookbook.add_panel(name, partial, opts)` invocations.
+  # That's the Lookbook 2.x module-level API (Engine.panels.add_panel
+  # underneath); previous releases tried the config-level chain
+  # `config.lookbook.preview_inspector.panels.add`, which doesn't
+  # exist — caught while wiring the bootable demo in 0.7.0.
+  lookbook_double = Class.new do
     attr_reader :registered
 
-    define_method(:add) do |name, &block|
-      panel = panel_struct.new
-      block.call(panel)
-      @registered[name] = panel
+    def initialize
+      @registered = nil
+    end
+
+    def add_panel(name, partial_path, opts)
+      @registered = { name: name, partial_path: partial_path, opts: opts }
     end
   end
 
-  let(:panels) { panels_capture.new }
-  let(:inspector) { Struct.new(:panels).new(panels) }
-  let(:lookbook_config) { Struct.new(:preview_inspector).new(inspector) }
-  let(:rails_config) { Struct.new(:lookbook).new(lookbook_config) }
+  let(:lookbook) { lookbook_double.new }
 
   describe ".register_panel" do
-    it "adds a :guardrails panel with label, partial, and locals lambda" do
-      described_class.register_panel(rails_config)
+    it "calls Lookbook.add_panel with name :guardrails, the bundled partial path, and label/locals opts" do
+      described_class.register_panel(lookbook)
 
-      panel = panels.registered[:guardrails]
-      expect(panel).not_to be_nil
-      expect(panel.label).to eq("Guardrails")
-      expect(panel.partial).to eq("lookbook_panels/guardrails")
-      expect(panel.locals).to be_a(Proc)
+      reg = lookbook.registered
+      expect(reg).not_to be_nil
+      expect(reg[:name]).to eq(:guardrails)
+      expect(reg[:partial_path]).to eq("lookbook_panels/guardrails")
+      expect(reg[:opts][:label]).to eq("Guardrails")
+      expect(reg[:opts][:locals]).to be_a(Proc)
     end
 
-    it "is a no-op when config does not expose .lookbook (Lookbook gem missing)" do
-      bare_config = Struct.new(:other).new("nope")
-      expect { described_class.register_panel(bare_config) }.not_to raise_error
-      expect(panels.registered).to be_empty
+    it "is a no-op when the lookbook target doesn't respond to add_panel" do
+      bare = Object.new
+      expect { described_class.register_panel(bare) }.not_to raise_error
     end
   end
 
   describe "locals lambda" do
-    let(:preview_class) { double("PreviewClass", name: "ButtonComponent") }
-    let(:preview) { double("Preview", preview_class: preview_class) }
+    let(:preview_class) { double("PreviewClass", name: "ButtonComponentPreview") }
+    let(:preview) { double("Preview", preview_class_name: "ButtonComponentPreview") }
     let(:data) { double("PanelData", preview: preview) }
 
-    before do
-      described_class.register_panel(rails_config)
-    end
+    before { described_class.register_panel(lookbook) }
 
-    it "resolves preview class name and runs ComponentReport, yielding findings" do
+    it "strips the Preview suffix and runs ComponentReport against the component class" do
       fake_report = instance_double(Guardrails::Lookbook::ComponentReport)
       allow(Guardrails::Lookbook::ComponentReport).to receive(:new).and_return(fake_report)
       allow(fake_report).to receive(:for).with("ButtonComponent")
                                          .and_return(component: "ButtonComponent", violations: [])
       stub_const("Rails", double("Rails", root: Pathname("/fake/root")))
 
-      result = panels.registered[:guardrails].locals.call(data)
-
+      result = lookbook.registered[:opts][:locals].call(data)
       expect(result[:findings]).to include(component: "ButtonComponent")
     end
 
     it "yields nil findings when the preview data is unusable" do
-      result = panels.registered[:guardrails].locals.call(nil)
+      result = lookbook.registered[:opts][:locals].call(nil)
       expect(result[:findings]).to be_nil
     end
 
-    it "falls back to data.preview_class.name when data has no .preview" do
-      flat_data = double("FlatPanelData", preview_class: preview_class)
-      allow(flat_data).to receive(:respond_to?).with(:preview).and_return(false)
-      allow(flat_data).to receive(:respond_to?).with(:preview_class).and_return(true)
+    it "falls back to data.preview.preview_class.name when 2.x accessor missing" do
+      legacy_preview = double("LegacyPreview", preview_class: preview_class)
+      allow(legacy_preview).to receive(:respond_to?).with(:preview_class_name).and_return(false)
+      allow(legacy_preview).to receive(:respond_to?).with(:preview_class).and_return(true)
+      legacy_data = double("LegacyData", preview: legacy_preview)
 
       fake_report = instance_double(Guardrails::Lookbook::ComponentReport)
       allow(Guardrails::Lookbook::ComponentReport).to receive(:new).and_return(fake_report)
       allow(fake_report).to receive(:for).with("ButtonComponent").and_return(component: "ButtonComponent")
       stub_const("Rails", double("Rails", root: Pathname("/fake/root")))
 
-      result = panels.registered[:guardrails].locals.call(flat_data)
+      result = lookbook.registered[:opts][:locals].call(legacy_data)
       expect(result[:findings][:component]).to eq("ButtonComponent")
+    end
+
+    it "yields nil findings when the preview class has no Preview suffix" do
+      flat_preview = double("FlatPreview", preview_class_name: "RandomClass")
+      flat_data = double("FlatData", preview: flat_preview)
+
+      result = lookbook.registered[:opts][:locals].call(flat_data)
+      expect(result[:findings]).to be_nil
     end
   end
 
@@ -129,9 +131,9 @@ RSpec.describe Guardrails::Lookbook::PanelRegistration do
   describe ".register!" do
     it "calls both append_view_path and register_panel" do
       consumer = Class.new { def self.append_view_path(_); end }
-      described_class.register!(config: rails_config, view_consumer: consumer)
+      described_class.register!(lookbook: lookbook, view_consumer: consumer)
 
-      expect(panels.registered.keys).to eq([:guardrails])
+      expect(lookbook.registered[:name]).to eq(:guardrails)
     end
   end
 end

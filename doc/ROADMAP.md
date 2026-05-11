@@ -1,6 +1,6 @@
 # Guardrails — Roadmap
 
-**Status:** V0 finished, V1 mostly shipped (Lookbook auto-registration shipped 0.5.0, deep a11y shipped 0.6.0; sample-app boot remains), V2 2/3 done (cross-codebase patterns + class-itis)
+**Status:** V0 ✅, V1 ✅ (all items shipped), V2 2/3 (cross-codebase patterns + class-itis; visual diff remains)
 **Last updated:** 2026-05-10
 
 ## Context
@@ -102,7 +102,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | A11y integration | ✅ shipped (0.6.0) | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. **Deep mode shipped via `Guardrails::A11yDeep`** — consumes axe-core JSON output (single or multi-page) and folds findings into the unified report. `AXE_JSON=path/to/axe.json bundle exec rake guardrails:audit` or `rake guardrails:a11y:deep`. Stayed parse-only (no Capybara / headless Chrome runtime deps) per the original size constraint. |
 | `helper_recommended` detector | ✅ shipped | Flags `<button>` / `<a>` wrapping ERB output and suggests `tag.button` / `button_to` / `link_to`. Pairs with the a11y skip for the same case |
 | Targeted auto-fix | ✅ shipped | See V0 auto-fix table; tailwind_arbitrary now also auto-fixes when a `:tailwind` theme token matches |
-| Sample app in `examples/` | 🟡 partial | Fake-Rails-app directory tree (no Gemfile, no bootable server). Serves as integration-test surface and talk material; doesn't `rails server` |
+| Sample app in `examples/` | ✅ shipped (0.7.0) | Bootable Rails 7.2 app. `cd examples/demo && bundle install && bin/rails server` renders the seeded views and mounts Lookbook with the Guardrails panel auto-registered. Same tree the integration spec exercises. |
 
 ---
 

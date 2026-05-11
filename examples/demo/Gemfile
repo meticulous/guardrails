@@ -1,0 +1,37 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# Pinned to Rails 7.2 so the demo runs on the same baseline the gem
+# supports (>= 7.1 per guardrails.gemspec). Bump alongside the gem.
+gem "rails", "~> 7.2.0"
+
+# Asset pipeline — propshaft over sprockets keeps the dep tree small
+# and is the modern Rails default. The demo's SCSS doesn't need
+# precompilation for the audit story; just static asset serving.
+gem "propshaft"
+gem "importmap-rails"
+
+# Components + previews. The demo's `app/components/` exists to be
+# audited by `guardrails:audit`; Lookbook auto-registers the
+# Guardrails panel via the gem's Railtie so the integration is
+# visible side-by-side with the static report.
+gem "view_component"
+gem "lookbook"
+
+# Stimulus is referenced in `app/javascript/controllers/` so the
+# stimulus_audit has something to talk about. We don't ship a JS
+# bundler — importmap pins are enough for the demo's two files.
+gem "stimulus-rails"
+
+# Plain HTTP server. No threads required for the demo.
+gem "puma"
+
+# Guardrails itself — path dep so changes to the gem are picked up
+# without `bundle update` gymnastics.
+gem "guardrails", path: "../.."
+
+group :development do
+  # Better backtraces during the inevitable demo-day hiccup.
+  gem "web-console"
+end

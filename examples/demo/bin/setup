@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+
+APP_ROOT = File.expand_path("..", __dir__)
+
+def system!(*args)
+  system(*args, exception: true)
+end
+
+FileUtils.chdir APP_ROOT do
+  puts "== Installing dependencies =="
+  system! "bundle install"
+  puts "\n== Demo ready =="
+  puts "Boot the server with:  bin/rails server"
+  puts "Run the audit with:    bundle exec rake guardrails:audit"
+end
