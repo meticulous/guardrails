@@ -20,6 +20,7 @@ Gem::Specification.new do |spec|
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
   spec.metadata["rubygems_mfa_required"] = "true"
 
+  # Glob picks up the Lookbook panel partial under lib/guardrails/lookbook/views/.
   spec.files = Dir["lib/**/*", "doc/**/*", "LICENSE", "README.md"]
   spec.require_paths = ["lib"]
 
