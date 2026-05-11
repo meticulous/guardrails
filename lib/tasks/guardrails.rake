@@ -182,8 +182,15 @@ namespace :guardrails do
         )
       ]
 
-      Guardrails::Report::Summary.new(entries: summary_entries, output: $stdout).render
+      # Render the summary twice — once at the top so the reader
+      # knows what to expect, once at the bottom as a recap so they
+      # don't have to scroll back up after the per-detector dump.
+      # On a long output (Patchvault has 981 findings) the bottom
+      # recap is the load-bearing one.
+      summary = Guardrails::Report::Summary.new(entries: summary_entries, output: $stdout)
+      summary.render
       $stdout.write sink.string
+      summary.render(recap: true)
     end
 
     # Deep a11y findings only fail the audit when their impact crosses

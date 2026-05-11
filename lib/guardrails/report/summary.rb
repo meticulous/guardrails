@@ -34,11 +34,11 @@ module Guardrails
         @style = style || Style.new(io: output)
       end
 
-      def render
+      def render(recap: false)
         return if @entries.empty?
 
         @output.puts ""
-        @output.puts header_line
+        @output.puts header_line(recap: recap)
         @output.puts ""
 
         SEVERITY_ORDER.each do |severity|
@@ -53,8 +53,9 @@ module Guardrails
 
       private
 
-      def header_line
-        title = "Guardrails audit  —  #{total_findings} #{total_findings == 1 ? "finding" : "findings"}"
+      def header_line(recap: false)
+        kind = recap ? "recap" : "audit"
+        title = "Guardrails #{kind}  —  #{total_findings} #{total_findings == 1 ? "finding" : "findings"}"
         bar = "═" * 3
         bar_plain = "=" * 3
         # The divider character tracks the color setting so an

@@ -113,6 +113,22 @@ RSpec.describe Guardrails::Report::Summary do
       expect(output.string).not_to include("WARNING")
       expect(output.string).not_to include("SUGGEST")
     end
+
+    it "labels the header 'Guardrails audit' by default" do
+      entries = [entry(category: "raw_color", count: 1, severity: :error)]
+      described_class.new(entries: entries, output: output, style: style).render
+
+      expect(output.string).to include("Guardrails audit")
+      expect(output.string).not_to include("Guardrails recap")
+    end
+
+    it "labels the header 'Guardrails recap' when render(recap: true) — for the bottom-of-report repeat" do
+      entries = [entry(category: "raw_color", count: 1, severity: :error)]
+      described_class.new(entries: entries, output: output, style: style).render(recap: true)
+
+      expect(output.string).to include("Guardrails recap")
+      expect(output.string).not_to include("Guardrails audit")
+    end
   end
 
   describe "with colors forced on" do
