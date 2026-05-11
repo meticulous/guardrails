@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-10
+
+Minor release closing out V1's last 🟡 partial item — Lookbook auto-registration. Pre-0.5.0, the Lookbook panel was a documented manual wiring step (copy this initializer + this partial into your app); now the gem ships the partial and registers the panel automatically when Lookbook is loaded.
+
+### Added
+
+- **Auto-registered `:guardrails` Lookbook panel.** The Railtie's new `guardrails.lookbook_panel` initializer runs at app boot and is a no-op unless `defined?(::Lookbook)`. When Lookbook is present, the gem prepends its bundled view directory to `ActionController::Base.view_paths` and registers the panel on `config.lookbook.preview_inspector.panels`. The panel renders `ComponentReport` findings inline next to every preview: drift in the template, orphan slots, similar templates.
+- **`Guardrails::Lookbook::PanelRegistration` module** for the registration logic. Extracted from the Railtie so the panel-add logic and the locals lambda are unit-testable without booting Rails.
+- **Bundled partial at `lib/guardrails/lookbook/views/lookbook_panels/_guardrails.html.erb`.** Class hooks only (no styling) — the host's design system wins. Host apps can override by dropping their own version at `app/views/lookbook_panels/_guardrails.html.erb` (standard view-path precedence).
+
+### Changed
+
+- **`doc/LOOKBOOK.md`** rewritten to reflect auto-registration. The previous "copy this initializer" / "copy this partial" sections are gone; the doc now describes what the panel shows, how the Railtie wires it, and how to override.
+
+[0.5.0]: https://github.com/meticulous/guardrails/releases/tag/v0.5.0
+
 ## [0.4.0] - 2026-05-10
 
 Minor release adding the **class-itis** detector — the second V2 audit. Surfaces the AI-assisted-Rails failure mode of identical multi-class utility soup copy-pasted onto the same tag across many views, when the codebase already has (or should have) a shared component or `@apply` rule for it.

@@ -1,6 +1,6 @@
 # Guardrails — Roadmap
 
-**Status:** V0 finished, V1 mostly shipped, V2 2/3 done (cross-codebase patterns + class-itis)
+**Status:** V0 finished, V1 mostly shipped (Lookbook auto-registration shipped 0.5.0), V2 2/3 done (cross-codebase patterns + class-itis)
 **Last updated:** 2026-05-10
 
 ## Context
@@ -97,7 +97,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | ViewComponent preview detection | ✅ shipped | |
 | ViewComponent slot validation | ✅ shipped | Known limit: code-only components (`def call`) flag declared slots as orphans |
 | Component-shape similarity | ✅ shipped | n-gram Jaccard, default threshold 0.7. PartialSimilarity scans both `_*.html.erb` partials and `*_component.html.erb` VC templates |
-| Lookbook integration | 🟡 partial | `Guardrails::Lookbook::ComponentReport` data API + `doc/LOOKBOOK.md`. No Railtie auto-registration — user wires the panel manually |
+| Lookbook integration | ✅ shipped (0.5.0) | `Guardrails::Lookbook::ComponentReport` data API + Railtie auto-registers the `:guardrails` panel when Lookbook is loaded; partial ships inside the gem. Host can override the partial via standard view-path precedence. |
 | ERB-partial structural similarity | ✅ shipped | Same PartialSimilarity engine |
 | A11y integration | 🟡 partial | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name now skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. axe-core wrapper with `--deep` mode NOT shipped — would require Capybara + headless Chrome runtime deps. axe-core integration documented at `doc/A11Y.md` for users to wire alongside |
 | `helper_recommended` detector | ✅ shipped | Flags `<button>` / `<a>` wrapping ERB output and suggests `tag.button` / `button_to` / `link_to`. Pairs with the a11y skip for the same case |
