@@ -76,11 +76,11 @@ module Guardrails
         walk_subtrees(result.document) do |node, fingerprint, shape, size|
           next if size < @min_size
 
-          loc_start = node.location.start
+          line, column = ErbParser.start_position(node)
           occurrences[fingerprint] << Occurrence.new(
             file: relative,
-            line: loc_start.line,
-            column: loc_start.column + 1,
+            line: line,
+            column: column,
             size: size
           )
           shapes[fingerprint] ||= shape
@@ -115,7 +115,6 @@ module Guardrails
     # occurrences are exactly the children of B's occurrences — not a
     # distinct repeated structure.
     def dedupe_nested(patterns)
-      shape_to_pattern = patterns.to_h { |p| [p.shape, p] }
       patterns.reject do |inner|
         patterns.any? do |outer|
           next false if outer.equal?(inner)
@@ -130,14 +129,19 @@ module Guardrails
     end
 
     # True if `outer` contains `inner` as a proper child sub-shape — i.e.
-    # `inner` appears inside `outer` bounded by `(` / `,` / `)`. This
-    # avoids false matches like `tr` matching the middle of `strong`.
+    # `inner` appears inside `outer` bounded by `(` / `,` on the left and
+    # `)` / `,` on the right. The left bound must be a real `(` or `,`,
+    # never the start of the string: a prefix match like inner=`div(a)`
+    # against outer=`div(a,a)` would otherwise look valid (before=nil,
+    # after=`,`) even though it represents a structurally different
+    # subtree (1 child vs 2), causing dedupe_nested to drop a legitimate
+    # distinct pattern.
     def contains_subshape?(outer, inner)
-      idx = 0
+      idx = 1 # i > 0 only — never accept a prefix match
       while (i = outer.index(inner, idx))
-        before = i.zero? ? nil : outer[i - 1]
+        before = outer[i - 1]
         after = outer[i + inner.length]
-        return true if [nil, "(", ","].include?(before) && [")", ","].include?(after)
+        return true if ["(", ","].include?(before) && [")", ","].include?(after)
 
         idx = i + 1
       end

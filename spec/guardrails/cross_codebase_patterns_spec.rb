@@ -191,6 +191,20 @@ RSpec.describe Guardrails::CrossCodebasePatterns do
       expect(counts).to eq([4, 6])
     end
 
+    it "doesn't dedupe two patterns that share a prefix but differ in arity" do
+      # `div(a,a)` is a substring of `div(a,a,a)` starting at position 0,
+      # but it's a structurally different shape (2 children vs 3) — not a
+      # proper sub-shape. Both should survive dedupe.
+      two_a = "<div><a></a><a></a><span></span><span></span></div>" # div(a,a,span,span), size 5
+      three_a = "<div><a></a><a></a><a></a><span></span></div>"     # div(a,a,a,span),    size 5
+      3.times { |i| write_view "app/views/two#{i}.html.erb", two_a }
+      3.times { |i| write_view "app/views/three#{i}.html.erb", three_a }
+
+      patterns = run_patterns
+      shapes = patterns.map(&:shape).sort
+      expect(shapes).to eq(["div(a,a,a,span)", "div(a,a,span,span)"])
+    end
+
     it "doesn't false-match a sub-shape that happens to be a substring inside an unrelated tag" do
       # `tr` appears as text inside `strong` if you do a naive substring
       # search — but the shape grammar uses `(` / `,` / `)` boundaries,
