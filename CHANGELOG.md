@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-10
+
+Minor release adding a new cross-codebase pattern detector. Distinct from `PartialSimilarity` (which compares existing partials to each other), this audit looks at *any* element subtree in *any* view and surfaces shapes that repeat 3+ times — concrete refactor candidates for shared partials or ViewComponents.
+
+### Added
+
+- **`Guardrails::CrossCodebasePatterns` audit.** Walks every `app/views/**/*.html.erb` and `app/components/**/*.html.erb` file, fingerprints each subtree's tag-only shape (e.g. `article(header(h2),section(p,p),footer(a))`), and reports shapes that appear 3+ times with at least 5 element nodes. Findings include file + line for every occurrence so you can jump straight to extraction candidates. Reuses the same path-component ignore list as the main audit (vendor, node_modules, tmp, public, log, `*_mailer/`, `mailer/`).
+- **Wired into `rake guardrails:audit`** in both text and JSON modes. New env overrides: `PATTERN_MIN_SIZE` (default 5) and `PATTERN_MIN_OCCURRENCES` (default 3). Findings are advisory — they do not bump the exit code, since "this shape repeats" is a suggestion, not a violation.
+- **Redundant-nested dedupe.** When a table repeats N times, the naive walk produces three patterns with identical counts (`table(thead(tr(...)),tbody)`, `thead(tr(...))`, `tr(...)`). The detector drops the inner shapes when they're dominated by an outer pattern (same count, file containment, proper sub-shape) so only the actionable extraction candidate surfaces.
+
+### Verified
+
+Real-world signal across four codebases:
+
+| Repo | Patterns (after dedupe) | Top finding |
+|---|---|---|
+| Patchvault | 24 | An admin-card pattern (h2-link header + two h3/div pairs + button group) repeats 8 times |
+| Talos | 90 | A 5-column table (`table(thead(tr(th,th,th,th,th)),tbody)`) repeats 26 times |
+| Forem | 50 | A `ul(li(a),li(a),li(a))` nav structure repeats 10 times |
+| Avo | 0 | ViewComponent-driven — no static ERB to compare (expected) |
+
+[0.3.0]: https://github.com/meticulous/guardrails/releases/tag/v0.3.0
+
 ## [0.2.3] - 2026-05-10
 
 Patch release driven by dogfooding 0.2.2 against [Avo](https://github.com/avo-hq/avo) (Tailwind admin framework) and [Forem](https://github.com/forem/forem) (content platform). Three real-world layout/path patterns fixed.

@@ -16,6 +16,7 @@ namespace :guardrails do
     require "guardrails/partial_similarity"
     require "guardrails/view_component_audit"
     require "guardrails/a11y_audit"
+    require "guardrails/cross_codebase_patterns"
     require "stringio"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
     suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
@@ -23,6 +24,9 @@ namespace :guardrails do
     format = ENV["FORMAT"]&.downcase == "json" ? :json : :text
     similarity_opts = { root: root }
     similarity_opts[:threshold] = ENV["SIMILARITY_THRESHOLD"].to_f if ENV["SIMILARITY_THRESHOLD"]
+    pattern_opts = { root: root }
+    pattern_opts[:min_size] = ENV["PATTERN_MIN_SIZE"].to_i if ENV["PATTERN_MIN_SIZE"]
+    pattern_opts[:min_occurrences] = ENV["PATTERN_MIN_OCCURRENCES"].to_i if ENV["PATTERN_MIN_OCCURRENCES"]
 
     if format == :json
       # Run sub-audits silently so the only thing printed to stdout is one
@@ -37,6 +41,8 @@ namespace :guardrails do
       similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
       vc = Guardrails::ViewComponentAudit.new(root: root, output: sink).run
       a11y = Guardrails::A11yAudit.new(root: root, output: sink).run
+      pattern_opts[:output] = sink
+      patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
 
       require "json"
       payload = {
@@ -47,7 +53,8 @@ namespace :guardrails do
           similar_partials: similarity.length,
           missing_previews: vc.missing_previews.length,
           orphan_slots: vc.orphan_slots.length,
-          a11y: a11y.length
+          a11y: a11y.length,
+          patterns: patterns.length
         },
         violations: violations.map(&:to_h),
         stimulus: { orphaned: stimulus.orphaned, dead: stimulus.dead },
@@ -56,7 +63,10 @@ namespace :guardrails do
           missing_previews: vc.missing_previews,
           orphan_slots: vc.orphan_slots.map(&:to_h)
         },
-        a11y: a11y.map(&:to_h)
+        a11y: a11y.map(&:to_h),
+        patterns: patterns.map { |p|
+          { fingerprint: p.fingerprint, shape: p.shape, size: p.size, count: p.count, occurrences: p.occurrences.map(&:to_h) }
+        }
       }
       $stdout.puts JSON.pretty_generate(payload)
     else
@@ -67,6 +77,7 @@ namespace :guardrails do
       similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
       vc = Guardrails::ViewComponentAudit.new(root: root).run
       a11y = Guardrails::A11yAudit.new(root: root).run
+      patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
     end
 
     exit 1 if violations.any? || stimulus.violations? || similarity.any? || vc.violations? || a11y.any?
