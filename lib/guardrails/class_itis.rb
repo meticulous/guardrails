@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "pathname"
-require "set"
 require_relative "erb_parser"
 
 module Guardrails
