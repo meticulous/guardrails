@@ -14,7 +14,7 @@ The gem doesn't exist on RubyGems.org yet, so the trusted publisher is configure
 
    | Field | Value |
    |---|---|
-   | RubyGem name | `guardrails` |
+   | RubyGem name | `meticulous_guardrails` |
    | Repository owner | `meticulous` |
    | Repository name | `guardrails` |
    | Workflow filename | `release.yml` |
@@ -63,7 +63,7 @@ The whole flow typically runs in under 90 seconds.
 
 If trusted publishing breaks for any reason, the gem can still be published manually with an API key:
 
-1. Create an [API key on rubygems.org](https://rubygems.org/profile/api_keys) with the `push_rubygem` scope. Lock it to the `guardrails` gem.
+1. Create an [API key on rubygems.org](https://rubygems.org/profile/api_keys) with the `push_rubygem` scope. Lock it to the `meticulous_guardrails` gem.
 2. Configure local credentials:
    ```bash
    mkdir -p ~/.gem
@@ -73,10 +73,10 @@ If trusted publishing breaks for any reason, the gem can still be published manu
    # ---
    # :rubygems_api_key: rubygems_xxxxxxxxxxxxxxxxxxxxxxxx
    ```
-3. Build and push (`X.Y.Z` resolves to the current `Guardrails::VERSION` once `gem build` runs):
+3. Build and push:
    ```bash
-   gem build guardrails.gemspec
-   gem push guardrails-X.Y.Z.gem
+   gem build *.gemspec
+   gem push *.gem
    ```
 
 This path is for emergencies only — prefer the workflow.
@@ -85,14 +85,14 @@ This path is for emergencies only — prefer the workflow.
 
 - **No long-lived secret rotation.** The OIDC token is minted per workflow run and expires in minutes.
 - **Repo-bound by construction.** A leaked API key in a different repo's workflow would be useless against guardrails — trusted publishing is scoped to (repo × workflow × environment).
-- **Audit trail.** RubyGems records which workflow run published each version; you can confirm provenance at <https://rubygems.org/gems/guardrails/versions>.
+- **Audit trail.** RubyGems records which workflow run published each version; you can confirm provenance at <https://rubygems.org/gems/meticulous_guardrails/versions>.
 
 ## Yanking a bad release
 
 If a published version has a critical bug:
 
 ```bash
-gem yank guardrails -v X.Y.Z   # replace with the version to pull
+gem yank meticulous_guardrails -v X.Y.Z   # replace with the version to pull
 ```
 
 Yanking removes the version from `gem install` resolution but leaves the version slot reserved — you can't republish a yanked version number. Bump and re-release.

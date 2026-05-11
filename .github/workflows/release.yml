@@ -32,7 +32,7 @@ jobs:
     # rubygems.org setup form's defaults match what the workflow does.
     environment:
       name: release
-      url: https://rubygems.org/gems/guardrails
+      url: https://rubygems.org/gems/meticulous_guardrails
 
     # `id-token: write` is the critical permission for trusted
     # publishing — the action mints a GitHub OIDC token RubyGems
@@ -91,8 +91,11 @@ jobs:
       - name: Configure RubyGems trusted-publisher credentials
         uses: rubygems/configure-rubygems-credentials@762a4b77c3300434bb57c7ce80b20e36231927aa # v2.0.0
 
+      # Gemspec + .gem use wildcard patterns so a future rename
+      # doesn't need a workflow change too. There's only ever one of
+      # each in the repo root at release time.
       - name: Build gem
-        run: gem build guardrails.gemspec
+        run: gem build *.gemspec
 
       - name: Push to RubyGems.org
-        run: gem push guardrails-*.gem
+        run: gem push *.gem

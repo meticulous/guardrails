@@ -8,9 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [1.0.0] - 2026-05-11
 
-First release published to [RubyGems.org](https://rubygems.org/gems/guardrails). The `1.0` jump from `0.8.0` recognizes that:
+First release published to [RubyGems.org](https://rubygems.org/gems/meticulous_guardrails). The `1.0` jump from `0.8.0` recognizes that:
 
-1. **Distribution is now stable.** `gem install guardrails` and `gem "guardrails", "~> 1.0"` both work without git-tag gymnastics. RubyGems Trusted Publishing handles the release pipeline (see `doc/PUBLISHING.md`).
+1. **Distribution is now stable.** `gem install meticulous_guardrails` and `gem "meticulous_guardrails", "~> 1.0"` both work without git-tag gymnastics. RubyGems Trusted Publishing handles the release pipeline (see `doc/PUBLISHING.md`).
 2. **The originally-planned roadmap is end-to-end shipped.** V0 + V1 + V2 are all ✅:
 
    | Phase | Status |
@@ -19,10 +19,24 @@ First release published to [RubyGems.org](https://rubygems.org/gems/guardrails).
    | V1 — Polish + ecosystem | ✅ shipped (ViewComponent + Lookbook auto-panel, partial similarity, helper_recommended, static + deep a11y, targeted auto-fix, bootable sample app) |
    | V2 — Advanced | ✅ shipped (cross-codebase pattern detection, class-itis, visual-diff via snap_diff-capybara) |
 
+### Naming
+
+The gem ships as **`meticulous_guardrails`** on RubyGems, not `guardrails`. Why: the unqualified name was rejected by RubyGems' [similarity-rule typo-squatting prevention](https://blog.rubygems.org/2023/12/14/typo-squatting-prevention.html) against [`guard-rails`](https://rubygems.org/gems/guard-rails) (an unrelated Guard plugin that restarts Rails on file changes, 5.4M downloads). The two projects have nothing to do with each other but `guardrails` is one hyphen away from `guard-rails`, so the algorithm flagged it.
+
+For users:
+
+- **Gemfile:** `gem "meticulous_guardrails", "~> 1.0"`
+- **In code:** `require "guardrails"` (unchanged — module + entry point keep the project name; only the package name is namespaced)
+- **Rake tasks:** `rake guardrails:audit` (unchanged)
+- A `lib/meticulous_guardrails.rb` shim makes default Bundler auto-require work without users having to know about the rename.
+
+If we ever land a name exception through rubygems-support, we'll publish a transitional release.
+
 ### Changed
 
 - Nothing functionally different from 0.8.0. Same 459 examples, same detector behavior, same CLI surface.
-- README pin shifts from `github: "meticulous/guardrails", tag: "v0.8.0"` to `"~> 1.0"` now that the gem is on RubyGems.
+- README install snippet now uses `gem "meticulous_guardrails", "~> 1.0"`.
+- Top-level `lib/guardrails.rb` now requires `guardrails/configuration` eagerly so a Rails initializer's `Guardrails.configure { … }` block doesn't NoMethodError. Surfaced by local-build verification, two new regression specs lock the contract (suite is now 461/461).
 
 ### Stability commitment
 
