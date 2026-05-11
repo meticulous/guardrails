@@ -3,20 +3,19 @@
 require "guardrails/lookbook/panel_registration"
 
 RSpec.describe Guardrails::Lookbook::PanelRegistration do
-  # A captured "panel" — Lookbook's panel block exposes label / partial /
-  # locals as plain accessors, so a Struct stands in cleanly.
-  panel_double = Struct.new(:label, :partial, :locals)
+  # Lookbook's panel block exposes label / partial / locals as plain
+  # accessors, so a Struct stands in cleanly. The same shape is used
+  # both inside the capture class below and in `falls back…` further
+  # down — defined once at the top so both reuse it.
+  panel_struct = Struct.new(:label, :partial, :locals)
 
   # Captures `panels.add(:guardrails) { |panel| ... }` invocations.
   panels_capture = Class.new do
+    define_method(:initialize) { @registered = {} }
     attr_reader :registered
 
-    def initialize
-      @registered = {}
-    end
-
-    def add(name, &block)
-      panel = Struct.new(:label, :partial, :locals).new
+    define_method(:add) do |name, &block|
+      panel = panel_struct.new
       block.call(panel)
       @registered[name] = panel
     end
@@ -86,30 +85,50 @@ RSpec.describe Guardrails::Lookbook::PanelRegistration do
     end
   end
 
-  describe ".prepend_view_path" do
-    it "prepends the gem's view directory on the provided consumer" do
+  describe ".append_view_path" do
+    it "appends the gem's view directory on the provided consumer" do
       consumer = Class.new do
-        attr_reader :prepended
+        attr_reader :appended
 
-        def prepend_view_path(path)
-          @prepended = path
+        def append_view_path(path)
+          @appended = path
         end
       end.new
 
-      described_class.prepend_view_path(consumer)
+      described_class.append_view_path(consumer)
 
-      expect(consumer.prepended).to eq(described_class::VIEW_PATH)
-      expect(consumer.prepended).to end_with("/lookbook/views")
+      expect(consumer.appended).to eq(described_class::VIEW_PATH)
+      expect(consumer.appended).to end_with("/lookbook/views")
+    end
+
+    # Append (not prepend) keeps host `app/views/lookbook_panels/_guardrails.html.erb`
+    # ahead of the gem's bundled default. This is the contract the
+    # README and CHANGELOG advertise; lock it in.
+    it "appends rather than prepends so host views keep precedence" do
+      consumer = Class.new do
+        attr_reader :appended
+
+        def append_view_path(path)
+          @appended = path
+        end
+
+        def prepend_view_path(_path)
+          raise "host overrides break if we prepend"
+        end
+      end.new
+
+      expect { described_class.append_view_path(consumer) }.not_to raise_error
+      expect(consumer.appended).to eq(described_class::VIEW_PATH)
     end
 
     it "is a no-op when no consumer is available" do
-      expect { described_class.prepend_view_path(nil) }.not_to raise_error
+      expect { described_class.append_view_path(nil) }.not_to raise_error
     end
   end
 
   describe ".register!" do
-    it "calls both prepend_view_path and register_panel" do
-      consumer = Class.new { def self.prepend_view_path(_); end }
+    it "calls both append_view_path and register_panel" do
+      consumer = Class.new { def self.append_view_path(_); end }
       described_class.register!(config: rails_config, view_consumer: consumer)
 
       expect(panels.registered.keys).to eq([:guardrails])

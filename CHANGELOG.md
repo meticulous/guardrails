@@ -12,7 +12,7 @@ Minor release closing out V1's last 🟡 partial item — Lookbook auto-registra
 
 ### Added
 
-- **Auto-registered `:guardrails` Lookbook panel.** The Railtie's new `guardrails.lookbook_panel` initializer runs at app boot and is a no-op unless `defined?(::Lookbook)`. When Lookbook is present, the gem prepends its bundled view directory to `ActionController::Base.view_paths` and registers the panel on `config.lookbook.preview_inspector.panels`. The panel renders `ComponentReport` findings inline next to every preview: drift in the template, orphan slots, similar templates.
+- **Auto-registered `:guardrails` Lookbook panel.** The Railtie's new `guardrails.lookbook_panel` initializer runs at app boot and is a no-op unless `defined?(::Lookbook)`. When Lookbook is present, the gem **appends** its bundled view directory to `ActionController::Base.view_paths` (append, not prepend — so the host's `app/views/lookbook_panels/_guardrails.html.erb` still wins) and registers the panel on `config.lookbook.preview_inspector.panels`. The panel renders `ComponentReport` findings inline next to every preview: drift in the template, orphan slots, similar templates.
 - **`Guardrails::Lookbook::PanelRegistration` module** for the registration logic. Extracted from the Railtie so the panel-add logic and the locals lambda are unit-testable without booting Rails.
 - **Bundled partial at `lib/guardrails/lookbook/views/lookbook_panels/_guardrails.html.erb`.** Class hooks only (no styling) — the host's design system wins. Host apps can override by dropping their own version at `app/views/lookbook_panels/_guardrails.html.erb` (standard view-path precedence).
 

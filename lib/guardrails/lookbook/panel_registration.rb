@@ -22,15 +22,19 @@ module Guardrails
       VIEW_PATH = File.expand_path("views", __dir__)
 
       def register!(config: ::Rails.application.config, view_consumer: nil)
-        prepend_view_path(view_consumer)
+        append_view_path(view_consumer)
         register_panel(config)
       end
 
-      def prepend_view_path(view_consumer = nil)
+      # APPEND, not prepend — the host's `app/views` must keep precedence
+      # so that `app/views/lookbook_panels/_guardrails.html.erb` in the
+      # host wins over the gem's bundled default. Prepending would flip
+      # that and silently break the documented override mechanism.
+      def append_view_path(view_consumer = nil)
         target = view_consumer || (defined?(::ActionController::Base) ? ::ActionController::Base : nil)
-        return unless target&.respond_to?(:prepend_view_path)
+        return unless target&.respond_to?(:append_view_path)
 
-        target.prepend_view_path(VIEW_PATH)
+        target.append_view_path(VIEW_PATH)
       end
 
       # Adds the `:guardrails` panel to Lookbook's preview inspector. The

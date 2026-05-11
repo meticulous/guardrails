@@ -16,7 +16,7 @@ If the component has no findings, the panel renders a "No findings — this comp
 
 The Railtie's `guardrails.lookbook_panel` initializer runs at app boot and is a no-op unless `defined?(::Lookbook)`. When Lookbook is present:
 
-1. The gem prepends its view directory (`lib/guardrails/lookbook/views`) to `ActionController::Base.view_paths`, so the partial resolves.
+1. The gem **appends** its view directory (`lib/guardrails/lookbook/views`) to `ActionController::Base.view_paths`. Append, not prepend, so the host's `app/views/lookbook_panels/_guardrails.html.erb` (if present) still wins.
 2. It calls `Rails.application.config.lookbook.preview_inspector.panels.add(:guardrails)` with a locals lambda that, per render, runs `Guardrails::Lookbook::ComponentReport` against the current preview's component class.
 
 ## Programmatic access
