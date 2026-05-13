@@ -227,15 +227,25 @@ RSpec.describe Guardrails::CrossCodebasePatterns do
       expect(output.string).to eq("")
     end
 
-    it "prints a summary and per-pattern detail when patterns exist" do
+    it "prints a section heading, framing intro, and per-pattern detail" do
       shape = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
       3.times { |i| write_view "app/views/page#{i}.html.erb", shape }
 
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("Guardrails patterns: 1 recurring shape")
-      expect(output.string).to include("Pattern (5 elements, 3 occurrences)")
+      # Section heading uses the SUGGEST severity and names what's being reported
+      expect(output.string).to include("SUGGEST")
+      expect(output.string).to include("cross-codebase patterns (1 candidate, 3 occurrences)")
+      # Framing intro tells the reader what category catches and what action to take
+      expect(output.string).to include("repeat 3+ times across your views")
+      # Per-finding line is severity-tagged and carries shape + size + count
+      expect(output.string).to include("[suggest]")
+      expect(output.string).to include("shape: div(h1,p,p,p) (5 elements, 3 occurrences)")
+      # Inline suggestion arrow with an action
+      expect(output.string).to include("→")
+      expect(output.string).to include("consider extracting")
+      # Occurrence locations still present
       expect(output.string).to include("app/views/page0.html.erb")
     end
 
@@ -247,6 +257,18 @@ RSpec.describe Guardrails::CrossCodebasePatterns do
       described_class.new(root: root, output: output, max_occurrences_shown: 3).run
 
       expect(output.string).to include("… and 9 more")
+    end
+
+    it "varies the suggestion text by pattern signal" do
+      # Many repetitions → 'named component' wording. A shape repeated
+      # 6+ times reads as a too-common pattern to keep open-coded.
+      big_repeat = "<div><h1></h1><p></p><p></p><p></p><p></p></div>"
+      6.times { |i| write_view "app/views/page#{i}.html.erb", big_repeat }
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("named component is likely the right shape")
     end
   end
 end

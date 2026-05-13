@@ -2,6 +2,7 @@
 
 require "pathname"
 require_relative "configuration"
+require_relative "report/style"
 
 module Guardrails
   # Consumes screenshot-diff tool output and folds findings into the
@@ -36,7 +37,7 @@ module Guardrails
     end
 
     def initialize(root:, output: $stdout,
-                   adapter: nil, threshold: nil)
+                   adapter: nil, threshold: nil, style: nil)
       @root = Pathname(root)
       @output = output
       cfg = Guardrails.configuration.visual_diff
@@ -46,6 +47,7 @@ module Guardrails
       # adapter = "snap_diff"; c.visual_diff.threshold = "0.1" }`.
       @adapter_name = coerce_adapter(adapter) || cfg.adapter
       @threshold = threshold.nil? ? cfg.threshold : Float(threshold)
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -96,19 +98,27 @@ module Guardrails
     def print_report(findings)
       return if findings.empty?
 
+      noun = findings.length == 1 ? "finding" : "findings"
       @output.puts ""
-      @output.puts "Guardrails visual diff: #{findings.length} finding#{'s' if findings.length != 1} " \
-                   "(adapter: #{@adapter_name}, threshold: #{@threshold})"
+      @output.puts @style.section_heading(
+        :error,
+        "visual diff (#{findings.length} #{noun}, adapter: #{@adapter_name}, threshold: #{@threshold})"
+      )
+      @output.puts "  Screenshot-diff tool flagged these scenarios. Review each diff image"
+      @output.puts "  and either accept the new baseline (commit the updated screenshot) or"
+      @output.puts "  fix the regression that caused the visual change."
 
       findings.each do |f|
         ratio_label = f.mismatch_ratio.nil? ? "[diff present]" : "[#{(f.mismatch_ratio * 100).round(2)}% mismatch]"
         suffix = f.viewport ? " (#{f.viewport})" : ""
+
         @output.puts ""
-        @output.puts "  #{ratio_label} #{f.scenario}#{suffix}"
-        @output.puts "    baseline: #{f.baseline_path}" if f.baseline_path
-        @output.puts "    diff:     #{f.diff_path}" if f.diff_path
-        @output.puts "    url:      #{f.url}" if f.url
-        @output.puts "    selector: #{f.selector}" if f.selector
+        @output.puts "  #{@style.severity(:error, "#{ratio_label} #{f.scenario}#{suffix}")}"
+        @output.puts "    #{@style.suggestion("compare baseline ↔ diff; accept the new baseline or fix the regression")}"
+        @output.puts "    #{@style.location("baseline: #{f.baseline_path}")}" if f.baseline_path
+        @output.puts "    #{@style.location("diff:     #{f.diff_path}")}" if f.diff_path
+        @output.puts "    #{@style.location("url:      #{f.url}")}" if f.url
+        @output.puts "    #{@style.location("selector: #{f.selector}")}" if f.selector
       end
     end
   end

@@ -288,23 +288,30 @@ RSpec.describe Guardrails::PartialSimilarity do
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("similar group")
+      # Severity tag + section heading
+      expect(output.string).to include("SUGGEST")
+      expect(output.string).to include("similar partials")
+      # Framing intro names the action
+      expect(output.string).to include("Likely duplicates")
+      # Per-pair tagged line + suggestion arrow
+      expect(output.string).to include("[suggest]")
+      expect(output.string).to include("→")
       expect(output.string).to include("_a.html.erb")
       expect(output.string).to include("_b.html.erb")
     end
 
-    it "prints a single 'Group of N' line when many partials are pairwise similar" do
+    it "prints a 'group of N' line when many partials are pairwise similar" do
       structure = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
       4.times { |i| write_partial "app/views/_t#{i}.html.erb", structure }
 
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("Group of 4 templates")
+      expect(output.string).to include("group of 4 similar templates")
       expect(output.string).to include("6 pairs") # C(4,2)
     end
 
-    it "preserves tag-count suffix for size-2 (single-pair) groups" do
+    it "preserves tag-count info for size-2 (single-pair) groups" do
       structure_a = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
       structure_b = "<div><h1>x</h1><p>1</p><p>2</p><p>3</p></div>"
       write_partial "app/views/_a.html.erb", structure_a
@@ -313,8 +320,9 @@ RSpec.describe Guardrails::PartialSimilarity do
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      # Original pair format includes the tag-count suffix
-      expect(output.string).to match(/_a\.html\.erb ↔ .+_b\.html\.erb\s+\(\d+ \/ \d+ tags\)/)
+      # Pair header carries both file names; tag-count line follows it
+      expect(output.string).to match(/_a\.html\.erb ↔ .+_b\.html\.erb/)
+      expect(output.string).to match(/\d+ \/ \d+ tags/)
     end
   end
 end

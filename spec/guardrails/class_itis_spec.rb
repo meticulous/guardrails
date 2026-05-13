@@ -185,15 +185,22 @@ RSpec.describe Guardrails::ClassItis do
       expect(output.string).to eq("")
     end
 
-    it "prints a summary and per-cluster detail when clusters exist" do
+    it "prints a section heading, framing intro, and per-cluster detail" do
       el = '<button class="px-4 py-2 text-sm font-medium bg-white">x</button>'
       3.times { |i| write_view "app/views/page#{i}.html.erb", el }
 
       output = StringIO.new
       described_class.new(root: root, output: output).run
 
-      expect(output.string).to include("Guardrails class-itis: 1 repeating class cluster")
+      # Severity + category in the heading
+      expect(output.string).to include("SUGGEST")
+      expect(output.string).to include("class-itis (1 cluster, 3 occurrences)")
+      # Framing intro names the problem + the action
+      expect(output.string).to include("classic AI-paste pattern")
+      # Per-cluster tagged line + suggestion + class list + locations
+      expect(output.string).to include("[suggest]")
       expect(output.string).to include("<button> with 5 classes, 3 occurrences")
+      expect(output.string).to include("→")
       expect(output.string).to include("class=\"bg-white font-medium px-4 py-2 text-sm\"")
       expect(output.string).to include("app/views/page0.html.erb")
     end

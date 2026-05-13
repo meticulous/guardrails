@@ -5,6 +5,7 @@ require "set"
 require "stringio"
 require "yaml"
 require_relative "erb_parser"
+require_relative "report/style"
 
 module Guardrails
   class Audit
@@ -69,13 +70,14 @@ module Guardrails
       flood-color lighting-color stop-color
     ].freeze
 
-    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false)
+    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false, style: nil)
       @root = Pathname(root)
       @output = output
       @suggest = suggest
       @format = format
       @apply = apply
       @config = load_audit_config
+      @style = style
     end
 
     def run
@@ -445,16 +447,168 @@ module Guardrails
 
     def print_text(violations)
       if violations.empty?
-        @output.puts "Guardrails audit: no violations found."
+        @output.puts ""
+        @output.puts "#{style.colorize("✓", :green)} Guardrails audit: no violations found."
         return
       end
 
-      noun = violations.length == 1 ? "violation" : "violations"
-      @output.puts "Guardrails audit: #{violations.length} #{noun} found"
-      violations.each do |v|
-        @output.puts "  [#{v.type}] #{v.file}:#{v.line}:#{v.column}"
-        @output.puts "    #{v.snippet}"
+      # Group by type so each rule gets its own section with framing
+      # intro + tagged findings + inline suggestion arrows. The order
+      # mirrors what users care about: hex literals + inline styles +
+      # arbitrary Tailwind (real violations) before helper_recommended
+      # (a suggestion-shaped warning) and a11y (errors but grouped
+      # separately because A11yAudit owns them — the audit rake task
+      # threads them in via this same method).
+      type_order = %i[inline_style raw_color tailwind_arbitrary helper_recommended
+                      image_alt button_name link_name input_label]
+      by_type = violations.group_by(&:type)
+      ordered = type_order + (by_type.keys - type_order)
+
+      ordered.each do |type|
+        list = by_type[type] || []
+        next if list.empty?
+
+        print_violation_type(type, list)
       end
+    end
+
+    SEVERITY_FOR_TYPE = {
+      inline_style: :warning,
+      raw_color: :error,
+      tailwind_arbitrary: :error,
+      helper_recommended: :warning,
+      image_alt: :error,
+      button_name: :error,
+      link_name: :error,
+      input_label: :error
+    }.freeze
+
+    FRAMING_FOR_TYPE = {
+      inline_style: "Inline style attributes bypass your design tokens. Extract these to a CSS class or component stylesheet that references defined tokens.",
+      raw_color: "Hex/rgb literals in color attributes bypass your design tokens. Run APPLY=1 to auto-fix where a token matches; SUGGEST=1 writes a markdown checklist.",
+      tailwind_arbitrary: "Arbitrary Tailwind values (bg-[#fa3] etc.) bypass your theme. Add the value to theme.colors / theme.fontSize and use the named utility, or APPLY=1 to auto-fix where a token matches.",
+      helper_recommended: "Literal <button>/<a> wrapping ERB output hides intent from static analysis and a11y tooling. Switch to tag.button / link_to / button_to so attributes flow through one place.",
+      image_alt: "Images need accessible alt text. Use alt=\"\" for purely decorative images.",
+      button_name: "Buttons need an accessible name — text content, aria-label, or aria-labelledby.",
+      link_name: "Links need an accessible name — text content, aria-label, or aria-labelledby.",
+      input_label: "Interactive inputs need a programmatic label — aria-label, aria-labelledby, or a matching <label for=...>."
+    }.freeze
+
+    AUTO_FIXABLE_TYPES = %i[raw_color tailwind_arbitrary].freeze
+
+    def print_violation_type(type, violations)
+      severity = SEVERITY_FOR_TYPE.fetch(type, :warning)
+      auto_fix_marker = AUTO_FIXABLE_TYPES.include?(type) ? ", auto-fix available" : ""
+
+      @output.puts ""
+      @output.puts style.section_heading(
+        severity,
+        "#{type} (#{violations.length} #{violations.length == 1 ? "finding" : "findings"}#{auto_fix_marker})"
+      )
+      framing = FRAMING_FOR_TYPE[type]
+      wrap_framing(framing).each { |line| @output.puts "  #{line}" } if framing
+
+      violations.each do |v|
+        @output.puts ""
+        header = "#{type}: #{format_value(v)}"
+        @output.puts "  #{style.severity(severity, header)}"
+        suggestion = suggestion_for_violation(v)
+        @output.puts "    #{style.suggestion(suggestion)}" if suggestion
+        @output.puts "    #{style.location("#{v.file}:#{v.line}:#{v.column}")}"
+        @output.puts "    #{v.snippet}" if v.snippet
+      end
+    end
+
+    def format_value(violation)
+      case violation.type
+      when :raw_color, :tailwind_arbitrary
+        violation.value
+      when :inline_style
+        violation.value || "<inline style>"
+      else
+        violation.snippet.to_s[0, 60]
+      end
+    end
+
+    # Hard-wrap the framing-intro paragraph at ~72 chars so it doesn't
+    # run off the side of an 80-col terminal. Cheap word-wrap; nothing
+    # fancy needed for a 1-2 sentence paragraph.
+    def wrap_framing(text, width: 72)
+      lines = []
+      current = +""
+      text.split(/\s+/).each do |word|
+        if current.empty?
+          current << word
+        elsif current.length + 1 + word.length <= width
+          current << " " << word
+        else
+          lines << current
+          current = +word
+        end
+      end
+      lines << current unless current.empty?
+      lines
+    end
+
+    # Per-violation inline suggestion. For token-aware types
+    # (raw_color, tailwind_arbitrary), reuse load_tokens + TokenMatcher
+    # to surface exact matches inline. Anything more elaborate
+    # (near-match, replacement string, etc.) belongs in SUGGEST=1's
+    # markdown checklist.
+    def suggestion_for_violation(violation)
+      case violation.type
+      when :raw_color
+        matched_token_suggestion(violation, [:css_var])
+      when :tailwind_arbitrary
+        matched_token_suggestion(violation, [:tailwind]) ||
+          matched_token_suggestion(violation, [:css_var])
+      when :inline_style
+        "extract to a CSS class or component stylesheet"
+      when :helper_recommended
+        helper_recommended_suggestion(violation)
+      when :image_alt
+        "add an alt attribute (or alt=\"\" if decorative)"
+      when :button_name
+        "add text, aria-label, or aria-labelledby"
+      when :link_name
+        "add link text, aria-label, or aria-labelledby"
+      when :input_label
+        "add aria-label, aria-labelledby, or a matching <label for=...>"
+      end
+    end
+
+    def matched_token_suggestion(violation, allowed_syntaxes)
+      require_relative "token_matcher"
+      tokens = load_tokens.select { |t| allowed_syntaxes.include?(t.syntax) }
+      return nil if tokens.empty?
+
+      match = TokenMatcher.new(tokens).match(violation.value)
+      return nil unless match && match.kind == :exact
+
+      token = match.token
+      "replace with #{token_reference(token)} (exact match from #{token.file})"
+    end
+
+    def token_reference(token)
+      case token.syntax
+      when :css_var then "var(--#{token.name})"
+      when :scss_var then "$#{token.name}"
+      when :tailwind then token.name.to_s
+      else token.name.to_s
+      end
+    end
+
+    def helper_recommended_suggestion(violation)
+      tag = violation.snippet.to_s[/<(\w+)/, 1]
+      case tag
+      when "button" then "use tag.button(label, ...) or button_to(label, path)"
+      when "a" then "use link_to(label, path, ...)"
+      else "use the Rails helper for this element"
+      end
+    end
+
+    def style
+      @style ||= Report::Style.new(io: @output)
     end
 
     def print_json(violations)

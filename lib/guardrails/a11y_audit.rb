@@ -3,6 +3,7 @@
 require "pathname"
 require "set"
 require_relative "erb_parser"
+require_relative "report/style"
 
 module Guardrails
   # Static a11y checks that don't require a browser — element-level rules
@@ -23,9 +24,17 @@ module Guardrails
 
     NON_INTERACTIVE_INPUT_TYPES = %w[hidden submit button reset image].freeze
 
-    def initialize(root:, output: $stdout)
+    SUGGESTION_FOR_RULE = {
+      "image_alt" => "add an alt attribute (or alt=\"\" if decorative)",
+      "button_name" => "add text, aria-label, or aria-labelledby",
+      "link_name" => "add link text, aria-label, or aria-labelledby",
+      "input_label" => "add aria-label, aria-labelledby, or a matching <label for=...>"
+    }.freeze
+
+    def initialize(root:, output: $stdout, style: nil)
       @root = Pathname(root)
       @output = output
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -237,12 +246,19 @@ module Guardrails
     def print_report(findings)
       return if findings.empty?
 
-      @output.puts ""
       noun = findings.length == 1 ? "issue" : "issues"
-      @output.puts "Guardrails a11y: #{findings.length} static #{noun} found"
+      @output.puts ""
+      @output.puts @style.section_heading(:error, "a11y (#{findings.length} static #{noun})")
+      @output.puts "  Element-level a11y rules answerable from view source — missing alt text,"
+      @output.puts "  unnamed buttons, unlabeled inputs, link without name. Full WCAG coverage"
+      @output.puts "  needs runtime checks; layer axe-core via AXE_JSON= for that."
+
       findings.each do |f|
-        @output.puts "  [#{f.rule}] #{f.file}:#{f.line}:#{f.column}"
-        @output.puts "    #{f.snippet}"
+        @output.puts ""
+        @output.puts "  #{@style.severity(:error, "#{f.rule}: #{f.snippet.to_s[0, 60]}")}"
+        suggestion = SUGGESTION_FOR_RULE[f.rule.to_s]
+        @output.puts "    #{@style.suggestion(suggestion)}" if suggestion
+        @output.puts "    #{@style.location("#{f.file}:#{f.line}:#{f.column}")}"
       end
     end
   end

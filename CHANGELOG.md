@@ -6,6 +6,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-11
+
+Report-UX overhaul. The pre-1.1.0 audit output told you *what* it found but not *what to do about it* — suggestions only fired under `SUGGEST=1` (markdown file), and the inline text dump was a wall of categorical findings that took insider knowledge to triage. 1.1.0 inverts that: every finding now carries its own inline action; a top-of-report summary surfaces the shape of the work before you read details.
+
+No detector logic changes. Same 461 examples preserved, plus 35 new ones for the formatting work (496 total).
+
+### Added
+
+- **Top-of-report triage summary.** The audit now prints a severity-grouped rollup before any per-detector detail: errors first, then warnings, then suggestions; counts per category; auto-fix availability flagged inline; action hints for suggestions. Tells you in one glance what to triage vs. what's a refactor backlog item.
+
+- **Per-finding inline suggestions on every detector.** Every line in every detector's output now carries a `→` arrow with the action it implies. The `cross-codebase pattern: table(thead(...),tbody)` you previously had to interpret now reads with a literal "consider extracting into a shared partial" right next to it. `raw_color #0066ff` and `tailwind_arbitrary bg-[#fa3]` additionally surface the matched token inline when one exists in your `colors_file` — no need for `SUGGEST=1` to know what to replace each with.
+
+- **Framing intros per detector section.** Each category prints a 2-3 line paragraph before its findings that names what the rule catches and what action it implies. New users no longer need to learn the detector taxonomy by reverse-engineering the output.
+
+- **Severity tagging.** Every finding line is prefixed with `[error]` / `[warning]` / `[suggest]`. Easy to grep, easy to skim, easy to filter visually.
+
+- **ASCII styling with TTY auto-detection.** Output is colored when piped to a real terminal; plain text when piped to a file or `tee`. Respects `NO_COLOR=1` per the [no-color.org convention](https://no-color.org/). Box-drawing characters in the summary header degrade to ASCII (`+ - |`) when colors are off.
+
+- **`Guardrails::Report::Style`** module (~120 lines) — colorize, severity tagging, location dimming, box-drawing. Self-contained and unit-tested (20 specs).
+
+- **`Guardrails::Report::Summary`** class (~100 lines) — builds the top-of-report rollup from an `Entry` list contributed by each detector. Tested independently (13 specs) so new detectors only have to register an Entry to surface in the summary.
+
+### Severity assignments
+
+Each detector type carries an implicit severity that drives both summary grouping and per-line tagging:
+
+| Severity | Detectors |
+|---|---|
+| `error` | `raw_color`, `tailwind_arbitrary`, all 4 static `a11y` rules (`image_alt`, `button_name`, `link_name`, `input_label`), `visual_diff` (any mismatch above threshold) |
+| `warning` | `inline_style`, `helper_recommended`, `stimulus orphaned`, `stimulus dead`, `missing previews`, `orphan slots` |
+| `suggestion` | `similar partials`, `cross-codebase patterns`, `class-itis` |
+
+**`a11y_deep` is a special case:** its section heading is fixed (rendered as a single banner), but each finding is tagged at a severity derived from axe-core's `impact` field — `critical` and `serious` become `error`, `moderate` becomes `warning`, `minor` becomes `suggestion`. So a single `a11y_deep` section can contain a mix of severity tags. The summary entry for the section uses the strictest impact present (default: `:error` if any are present) so the rollup over-counts toward urgency rather than under-counts.
+
+This isn't yet exposed as a configurable filter (e.g. `SEVERITY=error` to mute suggestions) — see follow-ups below.
+
+### Unchanged
+
+- **JSON output (`FORMAT=json`)** has no ANSI codes and no styling; the JSON payload's shape is unchanged from 1.0.0.
+- **`SUGGEST=1` markdown writer** still produces `doc/guardrails-suggestions-{TIMESTAMP}.md` for users who want a per-finding markdown checklist they can paste into a PR description or issue.
+- **Exit codes** unchanged: any error or warning bumps to exit 1; suggestions don't.
+
+### Known follow-ups (not in 1.1.0)
+
+- **`SEVERITY=error`** env knob to mute warning/suggestion sections + their contribution to the exit code, for CI gates that only want to fail on errors.
+- **File-grouped view** as an alternative to category-grouped — sometimes more actionable when you're working through one file at a time.
+- **Per-finding markdown export** alongside the existing checklist, so suggestions can sync into a GitHub issue or PR comment per category.
+- **Lookbook panel finding density** — the auto-registered panel could surface findings in the new format too, currently still uses the older.
+
+[1.1.0]: https://github.com/meticulous/guardrails/releases/tag/v1.1.0
+
 ## [1.0.0] - 2026-05-11
 
 First release published to [RubyGems.org](https://rubygems.org/gems/ui_guardrails). The `1.0` jump from `0.8.0` recognizes that:

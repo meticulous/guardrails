@@ -3,6 +3,7 @@
 require "pathname"
 require "set"
 require_relative "erb_parser"
+require_relative "report/style"
 
 module Guardrails
   class PartialSimilarity
@@ -20,11 +21,13 @@ module Guardrails
       "app/components/**/*_component.html.erb"
     ].freeze
 
-    def initialize(root:, output: $stdout, threshold: DEFAULT_THRESHOLD, ngram_size: DEFAULT_NGRAM_SIZE)
+    def initialize(root:, output: $stdout, threshold: DEFAULT_THRESHOLD,
+                   ngram_size: DEFAULT_NGRAM_SIZE, style: nil)
       @root = Pathname(root)
       @output = output
       @threshold = threshold
       @ngram_size = ngram_size
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -202,30 +205,55 @@ module Guardrails
 
       groups = group_findings(findings)
       total_files = groups.sum { |g| g[:files].size }
+      group_noun = groups.length == 1 ? "group" : "groups"
 
       @output.puts ""
-      group_noun = groups.length == 1 ? "group" : "groups"
-      @output.puts "Guardrails templates: #{groups.length} similar #{group_noun} (#{findings.length} pairs across #{total_files} files; >= #{@threshold} structural similarity)"
+      @output.puts @style.section_heading(
+        :suggestion,
+        "similar partials (#{groups.length} #{group_noun}, #{findings.length} pairs, #{total_files} files)"
+      )
+      @output.puts "  Templates with >= #{@threshold} structural similarity. Likely duplicates;"
+      @output.puts "  consider extracting the common shape into a partial or parameterizing"
+      @output.puts "  one with locals to subsume the others."
 
       groups.each do |group|
+        @output.puts ""
         if group[:files].length == 2
-          # Use the original Finding so we keep the tag-count suffix
-          # (e.g. "(12 / 14 tags)") that single-pair output has always
-          # included. The sorted file list is still authoritative for
-          # display order.
+          # Pair — keep the tag-count suffix; it's a useful signal of
+          # how big the templates are.
           pair = group[:sample_pair]
           file_a, file_b = group[:files]
-          @output.puts "  #{format('%.2f', group[:score_max])}  #{file_a} ↔ #{file_b}  (#{pair.tag_count_a} / #{pair.tag_count_b} tags)"
+          header = "#{format('%.2f', group[:score_max])} similar: #{file_a} ↔ #{file_b}"
+          @output.puts "  #{@style.severity(:suggestion, header)}"
+          @output.puts "    #{@style.suggestion(suggestion_for_pair(group))}"
+          @output.puts "    #{@style.location("#{pair.tag_count_a} / #{pair.tag_count_b} tags")}"
         else
           score_label = if group[:score_min] == group[:score_max]
                          format("%.2f", group[:score_max])
                        else
                          "#{format('%.2f', group[:score_min])}–#{format('%.2f', group[:score_max])}"
                        end
-          @output.puts "  Group of #{group[:files].length} templates (#{score_label}, #{group[:pair_count]} pairs):"
-          group[:files].each { |f| @output.puts "    #{f}" }
+          header = "group of #{group[:files].length} similar templates (#{score_label}, #{group[:pair_count]} pairs)"
+          @output.puts "  #{@style.severity(:suggestion, header)}"
+          @output.puts "    #{@style.suggestion(suggestion_for_group(group))}"
+          group[:files].each { |f| @output.puts "    #{@style.location(f)}" }
         end
       end
+    end
+
+    def suggestion_for_pair(group)
+      score = group[:score_max]
+      if score >= 0.95
+        "near-identical — pick one and delete the other, or merge with locals"
+      elsif score >= 0.85
+        "very similar — parameterize one with locals and render it from the other"
+      else
+        "shared structure — consider a partial that both can render"
+      end
+    end
+
+    def suggestion_for_group(group)
+      "#{group[:files].length} templates sharing structure — strong candidate for one shared partial"
     end
   end
 end

@@ -177,8 +177,8 @@ RSpec.describe Guardrails::ViewComponentAudit do
 
       expect(result.missing_previews).to eq(["button"])
       expect(result.orphan_slots.map(&:slot)).to eq(["icon"])
-      expect(output.string).to include("without a preview")
-      expect(output.string).to include("never referenced")
+      expect(output.string).to include("missing previews")
+      expect(output.string).to include("orphan slots")
     end
   end
 end

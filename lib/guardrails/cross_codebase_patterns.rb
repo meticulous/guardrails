@@ -4,6 +4,7 @@ require "pathname"
 require "digest"
 require "set"
 require_relative "erb_parser"
+require_relative "report/style"
 
 module Guardrails
   # Finds recurring structural patterns across the codebase — element
@@ -50,12 +51,14 @@ module Guardrails
     def initialize(root:, output: $stdout,
                    min_size: DEFAULT_MIN_SIZE,
                    min_occurrences: DEFAULT_MIN_OCCURRENCES,
-                   max_occurrences_shown: DEFAULT_MAX_OCCURRENCES_SHOWN)
+                   max_occurrences_shown: DEFAULT_MAX_OCCURRENCES_SHOWN,
+                   style: nil)
       @root = Pathname(root)
       @output = output
       @min_size = min_size
       @min_occurrences = min_occurrences
       @max_occurrences_shown = max_occurrences_shown
+      @style = style || Report::Style.new(io: output)
     end
 
     def run
@@ -212,22 +215,50 @@ module Guardrails
       return if patterns.empty?
 
       total_occurrences = patterns.sum(&:count)
-      noun = patterns.length == 1 ? "shape" : "shapes"
+      noun = patterns.length == 1 ? "candidate" : "candidates"
+
       @output.puts ""
-      @output.puts "Guardrails patterns: #{patterns.length} recurring #{noun} " \
-                   "(#{total_occurrences} occurrences; >= #{@min_size} elements, >= #{@min_occurrences} occurrences)"
+      @output.puts @style.section_heading(
+        :suggestion,
+        "cross-codebase patterns (#{patterns.length} #{noun}, #{total_occurrences} occurrences)"
+      )
+      @output.puts "  These element subtrees repeat #{@min_occurrences}+ times across your views and"
+      @output.puts "  components. Each is a candidate for extracting into a shared partial or"
+      @output.puts "  ViewComponent. Threshold: >= #{@min_size} elements, >= #{@min_occurrences} occurrences."
 
       patterns.each do |pattern|
         @output.puts ""
-        @output.puts "  Pattern (#{pattern.size} elements, #{pattern.count} occurrences): #{truncate_shape(pattern.shape)}"
+        header = "shape: #{truncate_shape(pattern.shape)} (#{pattern.size} elements, #{pattern.count} occurrences)"
+        @output.puts "  #{@style.severity(:suggestion, header)}"
+        @output.puts "    #{@style.suggestion(suggestion_for(pattern))}"
         pattern.occurrences.first(@max_occurrences_shown).each do |occ|
-          @output.puts "    #{occ.file}:#{occ.line}"
+          @output.puts "    #{@style.location("#{occ.file}:#{occ.line}")}"
         end
         if pattern.occurrences.length > @max_occurrences_shown
           remaining = pattern.occurrences.length - @max_occurrences_shown
-          @output.puts "    … and #{remaining} more"
+          @output.puts "    #{@style.location("… and #{remaining} more")}"
         end
       end
+    end
+
+    # The suggestion line varies with shape signal: small repeats want
+    # a generic partial; large/very-repeating shapes nudge toward a
+    # named component. Specific enough to be actionable without
+    # pretending we know the user's design system.
+    def suggestion_for(pattern)
+      if pattern.count >= 6
+        "repeats often enough that a named component is likely the right shape"
+      elsif pattern.size >= 10
+        "consider extracting into a ViewComponent (large enough to earn one)"
+      else
+        "consider extracting into a shared partial (e.g. _#{partial_hint(pattern)}.html.erb)"
+      end
+    end
+
+    # Quick name hint based on the root tag of the shape. Pure UX,
+    # not a contract — users will pick their own name.
+    def partial_hint(pattern)
+      pattern.shape[/\A(\w+)/, 1] || "shared"
     end
 
     # Cap shape display length so deep nested patterns don't blow out
