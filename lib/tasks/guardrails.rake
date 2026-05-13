@@ -111,23 +111,39 @@ namespace :guardrails do
       # render the top-of-report summary before the per-category
       # details (the summary needs every detector's count). Then
       # write the sink + per-category sections out together.
+      #
+      # Important: detectors write into `sink` (StringIO) but make
+      # ANSI-color decisions against `$stdout`. If we let each
+      # detector instantiate its own Style bound to the sink, every
+      # color() call would be false (StringIO isn't a TTY) and the
+      # body of the report would print plain even on a real terminal,
+      # while the top/bottom summary printed straight to $stdout
+      # would still be colored. Pre-build one Style here and thread
+      # it through every detector so the whole report tracks the
+      # real terminal's TTY/NO_COLOR signal consistently.
       require "guardrails/report/summary"
+      require "guardrails/report/style"
       sink = StringIO.new
+      report_style = Guardrails::Report::Style.new(io: $stdout)
       violations = Guardrails::Audit.new(
-        root: root, output: sink, suggest: suggest, apply: apply, format: :text
+        root: root, output: sink, suggest: suggest, apply: apply, format: :text,
+        style: report_style
       ).run
-      stimulus = Guardrails::StimulusAudit.new(root: root, output: sink).run
+      stimulus = Guardrails::StimulusAudit.new(root: root, output: sink, style: report_style).run
       similarity_opts[:output] = sink
+      similarity_opts[:style] = report_style
       similarity = Guardrails::PartialSimilarity.new(**similarity_opts).run
-      vc = Guardrails::ViewComponentAudit.new(root: root, output: sink).run
-      a11y = Guardrails::A11yAudit.new(root: root, output: sink).run
+      vc = Guardrails::ViewComponentAudit.new(root: root, output: sink, style: report_style).run
+      a11y = Guardrails::A11yAudit.new(root: root, output: sink, style: report_style).run
       pattern_opts[:output] = sink
+      pattern_opts[:style] = report_style
       patterns = Guardrails::CrossCodebasePatterns.new(**pattern_opts).run
       classitis_opts[:output] = sink
+      classitis_opts[:style] = report_style
       classitis = Guardrails::ClassItis.new(**classitis_opts).run
-      a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path, output: sink) : nil
+      a11y_deep_runner = axe_json_path ? Guardrails::A11yDeep.new(input: axe_json_path, output: sink, style: report_style) : nil
       a11y_deep = a11y_deep_runner&.run || []
-      visual_diff_runner = visual_diff_on ? Guardrails::VisualDiff.new(root: root, output: sink) : nil
+      visual_diff_runner = visual_diff_on ? Guardrails::VisualDiff.new(root: root, output: sink, style: report_style) : nil
       visual_diff = visual_diff_runner&.run || []
 
       summary_entries = [
@@ -187,7 +203,7 @@ namespace :guardrails do
       # don't have to scroll back up after the per-detector dump.
       # On a long output (Patchvault has 981 findings) the bottom
       # recap is the load-bearing one.
-      summary = Guardrails::Report::Summary.new(entries: summary_entries, output: $stdout)
+      summary = Guardrails::Report::Summary.new(entries: summary_entries, output: $stdout, style: report_style)
       summary.render
       $stdout.write sink.string
       summary.render(recap: true)

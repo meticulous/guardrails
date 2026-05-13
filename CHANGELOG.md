@@ -34,9 +34,11 @@ Each detector type carries an implicit severity that drives both summary groupin
 
 | Severity | Detectors |
 |---|---|
-| `error` | `raw_color`, `tailwind_arbitrary`, `inline_style`, `helper_recommended`, all 4 static `a11y` rules, `a11y_deep` (critical/serious impacts), `visual_diff` (any mismatch above threshold) |
-| `warning` | `stimulus orphaned`, `stimulus dead`, `missing previews`, `orphan slots`, `a11y_deep` (moderate impact) |
-| `suggestion` | `similar partials`, `cross-codebase patterns`, `class-itis`, `a11y_deep` (minor impact) |
+| `error` | `raw_color`, `tailwind_arbitrary`, all 4 static `a11y` rules (`image_alt`, `button_name`, `link_name`, `input_label`), `visual_diff` (any mismatch above threshold) |
+| `warning` | `inline_style`, `helper_recommended`, `stimulus orphaned`, `stimulus dead`, `missing previews`, `orphan slots` |
+| `suggestion` | `similar partials`, `cross-codebase patterns`, `class-itis` |
+
+**`a11y_deep` is a special case:** its section heading is fixed (rendered as a single banner), but each finding is tagged at a severity derived from axe-core's `impact` field — `critical` and `serious` become `error`, `moderate` becomes `warning`, `minor` becomes `suggestion`. So a single `a11y_deep` section can contain a mix of severity tags. The summary entry for the section uses the strictest impact present (default: `:error` if any are present) so the rollup over-counts toward urgency rather than under-counts.
 
 This isn't yet exposed as a configurable filter (e.g. `SEVERITY=error` to mute suggestions) — see follow-ups below.
 

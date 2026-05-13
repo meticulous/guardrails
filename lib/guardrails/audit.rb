@@ -70,13 +70,14 @@ module Guardrails
       flood-color lighting-color stop-color
     ].freeze
 
-    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false)
+    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false, style: nil)
       @root = Pathname(root)
       @output = output
       @suggest = suggest
       @format = format
       @apply = apply
       @config = load_audit_config
+      @style = style
     end
 
     def run
