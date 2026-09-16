@@ -1,4 +1,4 @@
-# Guardrails
+# UI-Guardrails
 
 A Rails toolset that prevents UI drift in AI-assisted applications. Static audits over your views, components, stylesheets, JS controllers, and tokens — surfacing the kinds of inconsistencies that compound silently as an AI assistant ships code faster than design-system discipline can keep up.
 
