@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
                      "component inventory, icon sprites, type scale, and color token management."
   spec.homepage = "https://github.com/meticulous/guardrails"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.4.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
@@ -30,7 +30,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*", "doc/**/*", "LICENSE", "README.md"]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "railties", ">= 7.1"
+  spec.add_dependency "railties", ">= 7.2"
   # Herb is a parser for HTML+ERB that exposes a real AST. Replaces the
   # regex-and-masking pipeline in 0.2.0+; far more accurate for detectors
   # that need to know "is this static text vs ERB output" or "what

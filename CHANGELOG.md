@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-19
+
+Compatibility-floor release. No detector, report, or API changes — if you're on Ruby 3.2/3.3 or Rails 7.1, stay on 1.1.0.
+
+### Changed
+
+- **Minimum Ruby is now 3.4** (was 3.2, EOL since March 2026). The release workflow runs on 3.4 to match.
+- **Minimum `railties` is now 7.2** (was 7.1, EOL) — the last 7.x line.
+
+[1.2.0]: https://github.com/meticulous/guardrails/releases/tag/v1.2.0
+
 ## [1.1.0] - 2026-05-11
 
 Report-UX overhaul. The pre-1.1.0 audit output told you *what* it found but not *what to do about it* — suggestions only fired under `SUGGEST=1` (markdown file), and the inline text dump was a wall of categorical findings that took insider knowledge to triage. 1.1.0 inverts that: every finding now carries its own inline action; a top-of-report summary surfaces the shape of the work before you read details.

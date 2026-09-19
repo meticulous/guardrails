@@ -3,7 +3,7 @@
 source "https://rubygems.org"
 
 # Pinned to Rails 7.2 so the demo runs on the same baseline the gem
-# supports (>= 7.1 per guardrails.gemspec). Bump alongside the gem.
+# supports (>= 7.2 per ui_guardrails.gemspec). Bump alongside the gem.
 gem "rails", "~> 7.2.0"
 
 # Asset pipeline — propshaft over sprockets keeps the dep tree small
