@@ -1,6 +1,6 @@
 # Guardrails — Roadmap
 
-**Status:** **1.3.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases have been about reading the findings rather than producing more of them: inline suggestions (1.1.0), then an interactive browser + HTML report (1.3.0).
+**Status:** **1.4.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases have been about reading the findings rather than producing more of them: inline suggestions (1.1.0), then an interactive browser + HTML report (1.3.0).
 **Last updated:** 2026-09-19
 
 ## Context
@@ -128,7 +128,7 @@ The planned roadmap ended at V2. Running the gem on real codebases (Patchvault: 
 | Interactive browser (`rake guardrails:tui`) | ✅ shipped (1.3.0) | Roll-up → category → finding → source, regroup by file, live filter, open in `$EDITOR` at the line, re-run. `io/console` only — no new dependencies. If the hand-rolled rendering stops being enough, swapping in a TUI library means replacing `TUI::Screen` + the loop in `tui.rb`; `TUI::State` (navigation) doesn't know about terminals. |
 | HTML report (`FORMAT=html`) | ✅ shipped (1.3.0) | One self-contained file, no server or assets — opens from disk or as a CI artifact. Generated rather than served: a mounted engine was more surface than the problem needed, and the Lookbook panel already covers in-app. |
 | File-grouped view | ✅ shipped (1.3.0) | `tab` in the TUI. Was a 1.1.0 follow-up. |
-| `SEVERITY=error` filter | not started | Mute warning / suggestion sections + their exit-code contribution, for CI gates that only fail on errors. The TUI / HTML report filter by severity interactively; the text report and exit code still don't. |
+| `SEVERITY=error\|warning` floor | ✅ shipped (1.4.0) | One severity floor across text report, exit code, JSON, HTML, and TUI. Skips detectors that can only produce muted findings. Filtered reports say what wasn't checked; unknown values abort. Supersedes the `--strict` flag dropped in V0. |
 | Lookbook panel on the new data layer | not started | The auto-registered panel still renders from its own `ComponentReport`; it could render `Report::Finding`s and pick up suggestions for free. |
 | CI test workflow | not started | Specs only run inside the release workflow, on one Ruby. A PR-time matrix (3.4 + head) would catch floor regressions before tag time. |
 

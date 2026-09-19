@@ -5,6 +5,7 @@ require "pathname"
 require "set"
 require_relative "report/style"
 require_relative "report/finding"
+require_relative "report/severity"
 
 module Guardrails
   # Consumes axe-core JSON output and folds the findings into Guardrails'
@@ -39,7 +40,9 @@ module Guardrails
     # `failing_impacts:` if your rule pack emits custom severities.
     DEFAULT_FAILING_IMPACTS = %w[minor moderate serious critical].freeze
 
-    def initialize(input:, output: $stdout, failing_impacts: DEFAULT_FAILING_IMPACTS, style: nil)
+    def initialize(input:, output: $stdout, failing_impacts: DEFAULT_FAILING_IMPACTS, style: nil,
+                   min_severity: Report::Severity::DEFAULT)
+      @min_severity = min_severity
       @input = input
       @output = output
       @failing_impacts = Set.new(failing_impacts.map(&:to_s))
@@ -47,7 +50,7 @@ module Guardrails
     end
 
     def run
-      findings = parse_input
+      findings = parse_input.select { |f| Report::Severity.include?(impact_to_severity(f.impact), @min_severity) }
       print_report(findings)
       findings
     end

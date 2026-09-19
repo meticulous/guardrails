@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-19
+
+### Added
+
+- **`SEVERITY=error|warning` — severity floor for the audit.** The `SEVERITY=error` follow-up promised in 1.1.0, and the grown-up version of the `--strict` flag dropped before 1.0 for want of severity levels. `SEVERITY=error` checks errors only; `SEVERITY=warning` drops suggestions; unset means everything, exactly as before. One meaning everywhere: the text report, exit code, `FORMAT=json`, `FORMAT=html`, and `guardrails:tui` all see the same filtered run. The point is CI adoption on an existing codebase — gate on errors today without first clearing the warning backlog.
+  - Detectors that can only produce muted findings aren't run at all, so `SEVERITY=error` skips the two slowest (partial similarity, cross-codebase patterns).
+  - Deep a11y findings filter by axe impact (`critical` / `serious` are errors, `moderate` a warning, `minor` a suggestion), same mapping the report already used for tagging.
+  - A filtered text report ends with `SEVERITY=error — warnings and suggestions were not checked.`, and the HTML report says the same in its header, so a green filtered run can't pass for a clean codebase.
+  - An unrecognized value (`SEVERITY=eror`) aborts with a message instead of being ignored — a typo must not silently un-gate a CI check.
+- **`Guardrails::Report::Severity`** — parse / compare / list-muted helpers behind the floor. `Report::Run`, `Audit`, and `A11yDeep` take `min_severity:`.
+
+### Unchanged
+
+- With `SEVERITY` unset, text and JSON output are byte-identical to 1.3.0, and the JSON shape is the same in every mode (muted categories are empty arrays / zero counts).
+
+[1.4.0]: https://github.com/meticulous/guardrails/releases/tag/v1.4.0
+
 ## [1.3.0] - 2026-09-19
 
 Navigating findings. 1.1.0 made each finding actionable; this makes a thousand of them browsable. Two new front-ends over the same audit run, and the data model that makes them possible. No detector logic changes; text and JSON output are byte-identical to 1.2.0.

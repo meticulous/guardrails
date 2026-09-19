@@ -4,7 +4,7 @@ A Rails toolset that prevents UI drift in AI-assisted applications. Static audit
 
 Built and maintained by [Meticulous](https://meticulous.com).
 
-**Current release:** 1.3.0 — V0 + V1 + V2 complete, published on [RubyGems.org as `ui_guardrails`](https://rubygems.org/gems/ui_guardrails). The Ruby module stays `Guardrails` (so `require "guardrails"` is unchanged) — only the gem package name on rubygems carries the `ui_` prefix, to clear RubyGems' similarity rule against the unrelated [`guard-rails`](https://rubygems.org/gems/guard-rails) gem. See [`doc/ROADMAP.md`](doc/ROADMAP.md) for status, [`CHANGELOG.md`](CHANGELOG.md) for the full naming rationale.
+**Current release:** 1.4.0 — V0 + V1 + V2 complete, published on [RubyGems.org as `ui_guardrails`](https://rubygems.org/gems/ui_guardrails). The Ruby module stays `Guardrails` (so `require "guardrails"` is unchanged) — only the gem package name on rubygems carries the `ui_` prefix, to clear RubyGems' similarity rule against the unrelated [`guard-rails`](https://rubygems.org/gems/guard-rails) gem. See [`doc/ROADMAP.md`](doc/ROADMAP.md) for status, [`CHANGELOG.md`](CHANGELOG.md) for the full naming rationale.
 
 ---
 
@@ -219,6 +219,7 @@ The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-fami
 |---|---|
 | `SUGGEST=1` | Write the markdown checklist alongside the text report. |
 | `APPLY=1` | Auto-fix raw_color + tailwind_arbitrary where tokens match. |
+| `SEVERITY=error` / `SEVERITY=warning` | Severity floor. `error` checks errors only; `warning` drops suggestions; default is everything. Applies to the report, the exit code, JSON, HTML, and the TUI alike. Detectors that can only produce muted findings aren't run. An unrecognized value aborts rather than being ignored. |
 | `FORMAT=json` | Emit one JSON document to stdout (all other audit output is suppressed). |
 | `FORMAT=html` / `OUTPUT=path` | Write the self-contained HTML report (default `tmp/guardrails/audit.html`). |
 | `GUARDRAILS_EDITOR=cmd` | Editor `guardrails:tui` opens locations in. Falls back to `$VISUAL`, then `$EDITOR`. |
@@ -241,6 +242,15 @@ The audit task is a single shell command:
 - name: Guardrails audit
   run: bundle exec rake guardrails:audit
 ```
+
+Adopting Guardrails on an existing codebase usually means a backlog of warnings you can't clear in one PR. Gate on errors now and ratchet down later:
+
+```yaml
+- name: Guardrails audit (errors only)
+  run: bundle exec rake guardrails:audit SEVERITY=error
+```
+
+`SEVERITY=error` exits 1 only when there are error-level findings (raw colors, arbitrary Tailwind values, a11y, visual diffs) and skips the warning- and suggestion-tier detectors entirely, so it's also the fastest way to run the audit. The report ends with a line saying what wasn't checked, so a green run can't be mistaken for a clean codebase.
 
 For richer integration:
 

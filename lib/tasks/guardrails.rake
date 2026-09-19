@@ -9,7 +9,7 @@ namespace :guardrails do
     Guardrails::Init.new(root: root, force: force).run
   end
 
-  desc "Audit views and components for UI drift (SUGGEST=1, APPLY=1, FORMAT=json|html)"
+  desc "Audit views and components for UI drift (SUGGEST=1, APPLY=1, FORMAT=json|html, SEVERITY=error|warning)"
   task :audit do
     require "guardrails/report/run"
     require "guardrails/report/style"
@@ -22,7 +22,11 @@ namespace :guardrails do
     # (see Report::Run). JSON and HTML modes discard the report body,
     # so they run unstyled.
     report_style = format == :text ? Guardrails::Report::Style.new(io: $stdout) : nil
-    run = Guardrails::Report::Run.from_env(root: root, style: report_style).call
+    run = begin
+      Guardrails::Report::Run.from_env(root: root, style: report_style).call
+    rescue ArgumentError => e
+      abort e.message
+    end
 
     if format == :json
       require "json"
@@ -32,7 +36,7 @@ namespace :guardrails do
       # CI artifact. OUTPUT= overrides the default tmp/ location.
       require "guardrails/report/html"
       output = ENV["OUTPUT"].to_s.strip
-      path = Guardrails::Report::Html.new(categories: run.categories, root: root)
+      path = Guardrails::Report::Html.new(categories: run.categories, root: root, muted: run.muted_severities)
                                      .write(output.empty? ? Guardrails::Report::Html::DEFAULT_PATH : output)
       $stdout.puts "Guardrails audit: #{run.findings.length} findings → #{path}"
     else
@@ -45,6 +49,13 @@ namespace :guardrails do
       summary.render
       $stdout.write run.body
       summary.render(recap: true)
+      # A filtered run that prints "no violations found" must not read
+      # as a clean bill of health.
+      unless run.muted_severities.empty?
+        muted = run.muted_severities.map { |s| "#{s}s" }.join(" and ")
+        $stdout.puts ""
+        $stdout.puts report_style.colorize("SEVERITY=#{run.min_severity} — #{muted} were not checked.", :dim)
+      end
     end
 
     exit 1 if run.failing?
@@ -63,7 +74,7 @@ namespace :guardrails do
     runner = -> { Guardrails::Report::Run.from_env(root: root, env: env).call }
     begin
       Guardrails::TUI.new(runner: runner, root: root).start
-    rescue Guardrails::TUI::NotInteractive => e
+    rescue Guardrails::TUI::NotInteractive, ArgumentError => e
       abort e.message
     end
   end
