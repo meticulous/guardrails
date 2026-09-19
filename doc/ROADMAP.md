@@ -1,7 +1,7 @@
 # Guardrails — Roadmap
 
-**Status:** **1.0.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (visual-diff via snap_diff-capybara landed 0.8.0; published as 1.0.0 once the trusted-publisher pipeline merged)
-**Last updated:** 2026-05-11
+**Status:** **1.3.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases have been about reading the findings rather than producing more of them: inline suggestions (1.1.0), then an interactive browser + HTML report (1.3.0).
+**Last updated:** 2026-09-19
 
 ## Context
 
@@ -113,6 +113,24 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | Cross-codebase pattern detection | ✅ shipped (0.3.0) | `Guardrails::CrossCodebasePatterns` — fingerprints element subtree shapes, surfaces shapes appearing 3+ times across `app/views` and `app/components`. Drops redundant nested patterns dominated by an outer shape. Verified against Patchvault (24 patterns), Talos (90), Forem (50), Avo (0, expected — ViewComponent-driven). |
 | Class-itis reduction | ✅ shipped (0.4.0) | `Guardrails::ClassItis` — groups elements by `(tag, sorted-class-list)`, reports tuples with >= 5 classes appearing in >= 3 places. ERB-driven fragments are dropped; static portion only. Verified against Forem (27 clusters incl. an `<h1>` repeating 27 times), Patchvault (1), Avo (1), Talos (0 — classes mostly ERB-fragmented). |
 | Visual diff integration | ✅ shipped (0.8.0) | `Guardrails::VisualDiff` parses screenshot-diff tool output and folds findings into the unified report. Initial adapter: snap_diff-capybara (baselines-in-git, the Rails-native default). BackstopJS adapter tracked in issue #15. Same parse-only constraint as `A11yDeep` — no Capybara / Chromium runtime deps. See `doc/VISUAL-DIFF.md` + `doc/RESEARCH-visual-diff.md`. |
+
+---
+
+## Post-1.0 — Report UX
+
+The planned roadmap ended at V2. Running the gem on real codebases (Patchvault: 981 findings) showed the next problem wasn't detection, it was *reading* the output.
+
+| Item | Status | Notes |
+|---|---|---|
+| Inline suggestions + triage summary | ✅ shipped (1.1.0) | Every finding carries a `→` action; severity-grouped summary at top and bottom; `[error]` / `[warning]` / `[suggest]` tags; TTY-aware ASCII styling, `NO_COLOR` honored. |
+| Ruby 3.4 / railties 7.2 floor | ✅ shipped (1.2.0) | Compatibility-only release. Ruby 3.2/3.3 or Rails 7.1 users stay on 1.1.0. |
+| Findings data layer | ✅ shipped (1.3.0) | `Guardrails::Report::Run` runs the audit once for every front-end; `Report::Finding` / `Location` / `Category` are detector-agnostic finding data. Every detector implements `categories(result)`, sharing its title / suggestion strings with the text report. New detectors only need to implement that to show up in the TUI and HTML report. |
+| Interactive browser (`rake guardrails:tui`) | ✅ shipped (1.3.0) | Roll-up → category → finding → source, regroup by file, live filter, open in `$EDITOR` at the line, re-run. `io/console` only — no new dependencies. If the hand-rolled rendering stops being enough, swapping in a TUI library means replacing `TUI::Screen` + the loop in `tui.rb`; `TUI::State` (navigation) doesn't know about terminals. |
+| HTML report (`FORMAT=html`) | ✅ shipped (1.3.0) | One self-contained file, no server or assets — opens from disk or as a CI artifact. Generated rather than served: a mounted engine was more surface than the problem needed, and the Lookbook panel already covers in-app. |
+| File-grouped view | ✅ shipped (1.3.0) | `tab` in the TUI. Was a 1.1.0 follow-up. |
+| `SEVERITY=error` filter | not started | Mute warning / suggestion sections + their exit-code contribution, for CI gates that only fail on errors. The TUI / HTML report filter by severity interactively; the text report and exit code still don't. |
+| Lookbook panel on the new data layer | not started | The auto-registered panel still renders from its own `ComponentReport`; it could render `Report::Finding`s and pick up suggestions for free. |
+| CI test workflow | not started | Specs only run inside the release workflow, on one Ruby. A PR-time matrix (3.4 + head) would catch floor regressions before tag time. |
 
 ---
 
