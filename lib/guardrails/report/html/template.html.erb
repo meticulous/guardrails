@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="ui_guardrails <%= h Guardrails::VERSION %>">
+<title>Guardrails audit — <%= h project_name %></title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf8; --surface: #ffffff; --ink: #1d1c1a; --muted: #6b6760; --line: #e4e0d8;
+    --code-bg: #f4f1ec; --accent: #2b5fd9;
+    --error: #c0322b; --error-bg: #fbeceb;
+    --warning: #9a6300; --warning-bg: #fbf3e0;
+    --suggestion: #1f6f78; --suggestion-bg: #e6f3f4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161514; --surface: #1f1e1c; --ink: #ece9e3; --muted: #9a958c; --line: #33312d;
+      --code-bg: #262422; --accent: #8fb0ff;
+      --error: #ff8a80; --error-bg: #3a1f1d;
+      --warning: #f0c060; --warning-bg: #36290f;
+      --suggestion: #7fd0d8; --suggestion-bg: #14302f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); }
+  a { color: var(--accent); }
+  code, pre, .loc, .mono { font-family: var(--mono); font-size: 13px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  header.top { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-top: 12px; padding-bottom: 12px; }
+  h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+  input[type=search], select {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+  }
+  input[type=search] { width: 220px; }
+  .toggle {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 999px; padding: 3px 11px;
+    border: 1px solid transparent; color: var(--sev); background: var(--sev-bg);
+  }
+  .toggle[aria-pressed=false] { background: transparent; border-color: var(--line); color: var(--muted); text-decoration: line-through; }
+  .error { --sev: var(--error); --sev-bg: var(--error-bg); }
+  .warning { --sev: var(--warning); --sev-bg: var(--warning-bg); }
+  .suggestion { --sev: var(--suggestion); --sev-bg: var(--suggestion-bg); }
+
+  main { padding: 24px 0 56px; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+  table.rollup { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .rollup th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sev); background: var(--sev-bg); padding: 7px 14px; }
+  .rollup td { padding: 7px 14px; border-top: 1px solid var(--line); }
+  .rollup td.count { text-align: right; font-variant-numeric: tabular-nums; width: 1%; white-space: nowrap; }
+  .rollup td.flag { color: var(--muted); font-size: 13px; width: 1%; white-space: nowrap; }
+  .rollup a { color: inherit; text-decoration: none; font-weight: 550; }
+  .rollup a:hover { text-decoration: underline; }
+
+  section.category { margin-top: 40px; scroll-margin-top: 70px; }
+  section.category h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: baseline; gap: 10px; }
+  .badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sev); background: var(--sev-bg); border-radius: 4px; padding: 2px 7px; }
+  .tally { color: var(--muted); font-weight: 400; font-size: 14px; }
+  .framing { color: var(--muted); margin: 0 0 14px; max-width: 70ch; }
+
+  .finding { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--sev); border-radius: 6px; padding: 11px 14px; margin-top: 8px; }
+  .finding h3 { font: 600 13.5px/1.45 var(--mono); margin: 0; overflow-wrap: anywhere; }
+  .suggest { margin: 5px 0 0; }
+  .suggest::before { content: "→ "; color: var(--suggestion); font-weight: 700; }
+  .locs { list-style: none; margin: 7px 0 0; padding: 0; }
+  .loc { color: var(--muted); overflow-wrap: anywhere; }
+  a.loc[href] { color: var(--accent); }
+  details.more summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 3px; }
+  pre { background: var(--code-bg); border-radius: 5px; padding: 8px 11px; margin: 9px 0 0; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  dl.details { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 13px; }
+  dl.details dt { color: var(--muted); }
+  dl.details dd { margin: 0; overflow-wrap: anywhere; }
+  footer.credit { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; text-align: center; padding: 22px 0 36px; }
+  footer.credit a { color: inherit; font-weight: 600; }
+  footer.credit a:hover { color: var(--accent); }
+  .clean, .nomatch { text-align: center; color: var(--muted); padding: 60px 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>Guardrails audit <span>— <%= h project_name %></span></h1>
+    <div class="controls">
+      <%- Summary::SEVERITY_ORDER.each do |severity| -%>
+      <%- next if severity_count(severity).zero? -%>
+      <button type="button" class="toggle <%= severity %>" data-severity="<%= severity %>" aria-pressed="true"><%= h SEVERITY_LABEL[severity] %>s · <%= severity_count(severity) %></button>
+      <%- end -%>
+      <input type="search" id="filter" placeholder="Filter findings…" aria-label="Filter findings">
+      <select id="editor" aria-label="Open file locations in">
+        <option value="">Links: off</option>
+        <%- EDITOR_URLS.each_key do |name| -%>
+        <option><%= h name %></option>
+        <%- end -%>
+      </select>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="meta"><%= pluralize(findings.length, "finding") %> across <%= pluralize(@categories.length, "category", "categories") %> · <span class="mono"><%= h @root %></span> · generated <%= h @generated_at.strftime("%Y-%m-%d %H:%M") %> by ui_guardrails <%= h Guardrails::VERSION %></p>
+
+  <%- if @categories.empty? -%>
+  <p class="clean">✓ No findings — the audit is clean.</p>
+  <%- else -%>
+  <table class="rollup">
+    <%- severity_groups.each do |severity, group| -%>
+    <tbody class="<%= severity %>" data-severity="<%= severity %>">
+      <tr><th colspan="3"><%= h SEVERITY_LABEL[severity] %>s — <%= pluralize(group.sum(&:count), "finding") %></th></tr>
+      <%- group.each do |category| -%>
+      <tr>
+        <td><a href="#<%= anchor(category) %>"><%= h category.name %></a></td>
+        <td class="flag"><%= "auto-fix available" if category.auto_fix %></td>
+        <td class="count"><%= category.count %></td>
+      </tr>
+      <%- end -%>
+    </tbody>
+    <%- end -%>
+  </table>
+
+  <%- @categories.each do |category| -%>
+  <section class="category <%= category.severity %>" id="<%= anchor(category) %>" data-severity="<%= category.severity %>">
+    <h2><span class="badge"><%= h SEVERITY_LABEL[category.severity] %></span> <%= h category.name %> <span class="tally"><span class="shown"><%= category.count %></span> of <%= category.count %></span></h2>
+    <%- if category.framing -%>
+    <p class="framing"><%= h category.framing %></p>
+    <%- end -%>
+    <%- category.findings.each do |finding| -%>
+    <article class="finding <%= finding.severity %>" data-severity="<%= finding.severity %>" data-search="<%= h search_text(finding) %>">
+      <h3><%= h finding.title %></h3>
+      <%- if finding.suggestion -%>
+      <p class="suggest"><%= h finding.suggestion %></p>
+      <%- end -%>
+      <%- unless finding.locations.empty? -%>
+      <%- shown, rest = finding.locations.first(8), finding.locations.drop(8) -%>
+      <ul class="locs">
+        <%- shown.each do |location| -%>
+        <li><a class="loc" data-path="<%= h absolute(location) %>" data-line="<%= h location.line %>" data-column="<%= h location.column %>"><%= h location %></a></li>
+        <%- end -%>
+      </ul>
+      <%- unless rest.empty? -%>
+      <details class="more">
+        <summary>… and <%= rest.length %> more</summary>
+        <ul class="locs">
+          <%- rest.each do |location| -%>
+          <li><a class="loc" data-path="<%= h absolute(location) %>" data-line="<%= h location.line %>" data-column="<%= h location.column %>"><%= h location %></a></li>
+          <%- end -%>
+        </ul>
+      </details>
+      <%- end -%>
+      <%- end -%>
+      <%- if finding.snippet -%>
+      <pre><code><%= h finding.snippet %></code></pre>
+      <%- end -%>
+      <%- unless finding.details.empty? -%>
+      <dl class="details">
+        <%- finding.details.each do |label, value| -%>
+        <dt><%= h label %></dt><dd class="mono"><%= h value %></dd>
+        <%- end -%>
+      </dl>
+      <%- end -%>
+    </article>
+    <%- end -%>
+  </section>
+  <%- end -%>
+  <p class="nomatch" hidden>No findings match the current filter.</p>
+  <%- end -%>
+</main>
+
+<footer class="credit">
+  <div class="wrap">ui-guardrails — built by <a href="https://meticulous.com" rel="noopener">Meticulous</a> with love</div>
+</footer>
+
+<script>
+(function () {
+  var EDITORS = <%= editor_urls_json %>;
+  var filter = document.getElementById("filter");
+  var editor = document.getElementById("editor");
+  var toggles = [].slice.call(document.querySelectorAll(".toggle"));
+  var off = {};
+
+  function apply() {
+    var needle = filter.value.trim().toLowerCase();
+    var any = false;
+    [].forEach.call(document.querySelectorAll("section.category"), function (section) {
+      var shown = 0;
+      [].forEach.call(section.querySelectorAll(".finding"), function (el) {
+        var visible = !off[el.dataset.severity] && (!needle || el.dataset.search.indexOf(needle) !== -1);
+        el.hidden = !visible;
+        if (visible) shown++;
+      });
+      section.hidden = shown === 0;
+      section.querySelector(".shown").textContent = shown;
+      if (shown) any = true;
+    });
+    var nomatch = document.querySelector(".nomatch");
+    if (nomatch) nomatch.hidden = any;
+  }
+
+  function link() {
+    var template = EDITORS[editor.value];
+    [].forEach.call(document.querySelectorAll("a.loc"), function (a) {
+      if (!template) { a.removeAttribute("href"); return; }
+      a.href = template
+        .replace("{path}", encodeURI(a.dataset.path))
+        .replace("{line}", a.dataset.line || "1")
+        .replace("{column}", a.dataset.column || "1");
+    });
+  }
+
+  toggles.forEach(function (button) {
+    button.addEventListener("click", function () {
+      var severity = button.dataset.severity;
+      off[severity] = !off[severity];
+      button.setAttribute("aria-pressed", String(!off[severity]));
+      apply();
+    });
+  });
+  filter.addEventListener("input", apply);
+  editor.addEventListener("change", function () {
+    try { localStorage.setItem("guardrails-editor", editor.value); } catch (e) {}
+    link();
+  });
+  try { editor.value = localStorage.getItem("guardrails-editor") || ""; } catch (e) {}
+  link();
+})();
+</script>
+</body>
+</html>

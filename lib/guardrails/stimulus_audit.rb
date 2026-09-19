@@ -2,6 +2,7 @@
 
 require "pathname"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   class StimulusAudit
@@ -56,16 +57,92 @@ module Guardrails
       result
     end
 
+    # Detector-agnostic view of `result` (see Report::Finding). Unlike
+    # the text report, findings carry locations: every view line that
+    # references an orphaned controller, and the JS file behind a dead
+    # one — the names alone don't tell you where to go.
+    def categories(result)
+      [
+        Report::Category.new(
+          name: "stimulus orphaned", severity: :warning, framing: ORPHANED_FRAMING.join(" "),
+          findings: result.orphaned.map { |name|
+            Report::Finding.new(
+              category: "stimulus orphaned", severity: :warning,
+              title: "stimulus orphaned: #{name}", suggestion: orphaned_suggestion(name),
+              locations: reference_locations(name)
+            )
+          }
+        ),
+        Report::Category.new(
+          name: "stimulus dead", severity: :warning, framing: DEAD_FRAMING.join(" "),
+          findings: result.dead.map { |name|
+            Report::Finding.new(
+              category: "stimulus dead", severity: :warning,
+              title: "stimulus dead: #{name}", suggestion: dead_suggestion(name),
+              locations: controller_locations(name)
+            )
+          }
+        )
+      ].reject { |c| c.findings.empty? }
+    end
+
     private
 
-    def collect_defined_controllers
-      paths = CONTROLLER_BASES.flat_map do |base|
+    ORPHANED_FRAMING = [
+      "data-controller=\"…\" references a Stimulus controller, but no matching",
+      "*_controller.{js,ts} file exists. Either create the controller or",
+      "remove the reference."
+    ].freeze
+
+    DEAD_FRAMING = [
+      "*_controller.{js,ts} file exists, but no view references it via",
+      "data-controller=\"…\". Either wire the controller into a template",
+      "or delete the file."
+    ].freeze
+
+    def orphaned_suggestion(name)
+      "create app/javascript/controllers/#{name}_controller.js or remove the data-controller=\"#{name}\" reference"
+    end
+
+    def dead_suggestion(name)
+      "reference it via data-controller=\"#{name}\" in a view, or delete the JS file"
+    end
+
+    def controller_paths
+      CONTROLLER_BASES.flat_map do |base|
         absolute = @root.join(base)
         next [] unless absolute.exist?
 
         Dir.glob(absolute.join(CONTROLLER_GLOB))
       end
-      paths.map { |path| controller_name_from_path(path) }.compact.uniq
+    end
+
+    def controller_locations(name)
+      controller_paths.select { |path| controller_name_from_path(path) == name }.sort.map do |path|
+        Report::Location.new(file: Pathname(path).relative_path_from(@root).to_s)
+      end
+    end
+
+    # Line-level lookup, only run for the (usually few) orphaned names
+    # — the main pass reads whole files and keeps names only. A
+    # reference the patterns only match across lines (a multi-line
+    # `data: { controller: ... }` hash) falls back to a file-level
+    # location rather than dropping out.
+    def reference_locations(name)
+      VIEW_PATTERNS.flat_map { |pattern| Dir.glob(@root.join(pattern)) }.sort.flat_map do |path|
+        content = File.read(path, encoding: Encoding::UTF_8)
+        next [] unless extract_names(content).include?(name)
+
+        relative = Pathname(path).relative_path_from(@root).to_s
+        lines = content.each_line.with_index(1).filter_map do |line, number|
+          Report::Location.new(file: relative, line: number) if extract_names(line).include?(name)
+        end
+        lines.empty? ? [Report::Location.new(file: relative)] : lines
+      end
+    end
+
+    def collect_defined_controllers
+      controller_paths.map { |path| controller_name_from_path(path) }.compact.uniq
     end
 
     # Derive a Stimulus controller identifier from a file path. We anchor
@@ -95,7 +172,10 @@ module Guardrails
     end
 
     def extract_referenced(file)
-      content = File.read(file, encoding: Encoding::UTF_8)
+      extract_names(File.read(file, encoding: Encoding::UTF_8))
+    end
+
+    def extract_names(content)
       [DATA_CONTROLLER_PATTERN, RUBY_DATA_CONTROLLER_PATTERN].flat_map do |pattern|
         content.scan(pattern).flat_map { |captures| captures[0].strip.split(/\s+/) }
       end
@@ -111,13 +191,11 @@ module Guardrails
           :warning,
           "stimulus orphaned (#{result.orphaned.length} #{noun})"
         )
-        @output.puts "  data-controller=\"…\" references a Stimulus controller, but no matching"
-        @output.puts "  *_controller.{js,ts} file exists. Either create the controller or"
-        @output.puts "  remove the reference."
+        ORPHANED_FRAMING.each { |line| @output.puts "  #{line}" }
         result.orphaned.each do |name|
           @output.puts ""
           @output.puts "  #{@style.severity(:warning, "stimulus orphaned: #{name}")}"
-          @output.puts "    #{@style.suggestion("create app/javascript/controllers/#{name}_controller.js or remove the data-controller=\"#{name}\" reference")}"
+          @output.puts "    #{@style.suggestion(orphaned_suggestion(name))}"
         end
       end
 
@@ -128,13 +206,11 @@ module Guardrails
           :warning,
           "stimulus dead (#{result.dead.length} #{noun})"
         )
-        @output.puts "  *_controller.{js,ts} file exists, but no view references it via"
-        @output.puts "  data-controller=\"…\". Either wire the controller into a template"
-        @output.puts "  or delete the file."
+        DEAD_FRAMING.each { |line| @output.puts "  #{line}" }
         result.dead.each do |name|
           @output.puts ""
           @output.puts "  #{@style.severity(:warning, "stimulus dead: #{name}")}"
-          @output.puts "    #{@style.suggestion("reference it via data-controller=\"#{name}\" in a view, or delete the JS file")}"
+          @output.puts "    #{@style.suggestion(dead_suggestion(name))}"
         end
       end
     end

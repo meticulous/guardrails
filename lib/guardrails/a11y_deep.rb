@@ -4,6 +4,7 @@ require "json"
 require "pathname"
 require "set"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   # Consumes axe-core JSON output and folds the findings into Guardrails'
@@ -64,7 +65,32 @@ module Guardrails
       findings.any? { |f| @failing_impacts.include?(f.impact.to_s) }
     end
 
+    # Detector-agnostic view of `findings` (see Report::Finding). These
+    # come from a live page, not a source file, so there are no
+    # locations — url and selector ride along as details. Severity is
+    # per finding, mapped from axe's impact.
+    def categories(findings)
+      return [] if findings.empty?
+
+      [Report::Category.new(
+        name: "a11y (deep)", severity: :error, framing: FRAMING.join(" "),
+        findings: findings.map { |f|
+          Report::Finding.new(
+            category: "a11y (deep)", severity: impact_to_severity(f.impact),
+            title: "[#{f.impact || 'unknown'}] #{f.rule}: #{f.description}",
+            suggestion: f.help_url && "see #{f.help_url}",
+            details: [["url", f.url], ["selector", f.selector], ["help", f.help_url]].reject { |_, v| v.nil? }
+          )
+        }
+      )]
+    end
+
     private
+
+    FRAMING = [
+      "Runtime accessibility issues axe-core caught against your live pages.",
+      "Each links to dequeuniversity.com for the canonical remediation."
+    ].freeze
 
     def parse_input
       raw = @input.is_a?(Hash) || @input.is_a?(Array) ? @input : JSON.parse(File.read(@input.to_s, encoding: Encoding::UTF_8))
@@ -110,8 +136,7 @@ module Guardrails
         :error,
         "a11y deep (#{findings.length} #{noun} from axe-core)"
       )
-      @output.puts "  Runtime accessibility issues axe-core caught against your live pages."
-      @output.puts "  Each links to dequeuniversity.com for the canonical remediation."
+      FRAMING.each { |line| @output.puts "  #{line}" }
 
       grouped.each do |url, page_findings|
         @output.puts ""

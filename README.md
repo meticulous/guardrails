@@ -92,6 +92,7 @@ APPLY=1 bundle exec rake guardrails:audit
 |---|---|
 | `guardrails:init` | Stack detection, writes `guardrails.yml`, scaffolds prefers-color-scheme / prefers-contrast media queries. Refuses to overwrite an existing config — `FORCE=1` overrides. |
 | `guardrails:audit` | Runs every detector — view drift, stimulus, partial similarity, view-components, a11y, cross-codebase patterns, class-itis. Exits 1 on violations. |
+| `guardrails:tui` | The same audit, browsable: a severity roll-up you drill into (category → finding → source), regroup by file, filter, and jump from into your editor or the HTML report. See [Browsing findings](#browsing-findings). |
 | `guardrails:icons` | Generates an SVG sprite from `app/assets/images/icons/`, flags inline `<svg>` in views, reports unused icons. |
 | `guardrails:tokens` | Parses your color and type-scale tokens (CSS vars / SCSS vars / Tailwind v3 config / Tailwind v4 `@theme`), reports hex literals in stylesheets that should reference a token. |
 | `guardrails:a11y:deep` | Reads axe-core JSON output and folds it into the unified report. Doesn't run axe itself (no Capybara / headless Chrome runtime deps) — point it at axe output your existing tooling produces. |
@@ -195,7 +196,22 @@ Every task prints a human-readable text report by default and exits 1 when viola
 FORMAT=json bundle exec rake guardrails:audit > findings.json
 ```
 
-The JSON payload has a `summary:` block with finding counts per category plus per-detector arrays — see the rake task source for the exact shape.
+The JSON payload has a `summary:` block with finding counts per category plus per-detector arrays — see `Guardrails::Report::Run#to_h` for the exact shape.
+
+### Browsing findings
+
+On a real codebase the text report is long (one of our test apps produces 981 findings). Two ways to navigate it instead of scrolling it:
+
+```bash
+bundle exec rake guardrails:tui                 # interactive, in the terminal
+FORMAT=html bundle exec rake guardrails:audit   # one self-contained HTML file
+```
+
+**`guardrails:tui`** opens on the same severity roll-up the text report leads with. `⏎` drills in — category → findings → a single finding with its suggestion, every location, and the source around it. `tab` regroups the whole thing by file (the files with the most findings first), `/` filters across category, title, suggestion, and path, `o` opens the highlighted location in your editor at the right line, `w` writes and opens the HTML report, `r` re-runs the audit, `?` lists the rest. It takes the same env vars as `guardrails:audit` except `APPLY` and `SUGGEST` — browsing never rewrites files. No new dependencies: it's built on Ruby's bundled `io/console`.
+
+The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-family, Zed, Sublime, TextMate, JetBrains, Helix, and vim/nvim/nano/emacs all open at the finding's line; anything else gets the file path. With no editor set, it falls back to `open` / `xdg-open`.
+
+**`FORMAT=html`** writes `tmp/guardrails/audit.html` (override with `OUTPUT=path`): the roll-up, every finding with its suggestion, locations, and snippet, a live filter, and severity toggles. Everything is inline — no server, no assets, no network — so it works opened from disk or uploaded as a CI artifact. File locations become editor links once you pick your editor from the menu in the header (remembered per browser). Note the file embeds absolute paths from the machine that generated it; that's what makes the editor links work.
 
 ### Common env vars
 
@@ -204,6 +220,8 @@ The JSON payload has a `summary:` block with finding counts per category plus pe
 | `SUGGEST=1` | Write the markdown checklist alongside the text report. |
 | `APPLY=1` | Auto-fix raw_color + tailwind_arbitrary where tokens match. |
 | `FORMAT=json` | Emit one JSON document to stdout (all other audit output is suppressed). |
+| `FORMAT=html` / `OUTPUT=path` | Write the self-contained HTML report (default `tmp/guardrails/audit.html`). |
+| `GUARDRAILS_EDITOR=cmd` | Editor `guardrails:tui` opens locations in. Falls back to `$VISUAL`, then `$EDITOR`. |
 | `FORCE=1` | Bypass `init`'s refuse-to-overwrite default. |
 | `AXE_JSON=path` | Fold axe-core findings into the unified report. |
 | `VISUAL_DIFF=1` | Fold visual-diff findings into `guardrails:audit`. Embedded installs can flip this on permanently via `Guardrails.configure { \|c\| c.visual_diff.enabled = true }`. |

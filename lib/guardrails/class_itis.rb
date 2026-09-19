@@ -3,6 +3,7 @@
 require "pathname"
 require_relative "erb_parser"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   # Finds repeating "class soup" — the same long class list applied to
@@ -98,7 +99,35 @@ module Guardrails
         .sort_by { |c| [-c.count, -c.class_count] }
     end
 
+    # Detector-agnostic view of `clusters` (see Report::Finding). One
+    # finding per cluster, carrying every occurrence and the full
+    # class list (the text report truncates both for terminal width).
+    def categories(clusters)
+      return [] if clusters.empty?
+
+      [Report::Category.new(
+        name: "class-itis", severity: :suggestion, framing: framing_lines.join(" "),
+        findings: clusters.map { |cluster|
+          Report::Finding.new(
+            category: "class-itis", severity: :suggestion,
+            title: "<#{cluster.tag}> with #{cluster.class_count} classes, #{cluster.count} occurrences",
+            suggestion: suggestion_for(cluster),
+            locations: cluster.occurrences.map { |occ| Report::Location.new(file: occ.file, line: occ.line, column: occ.column) },
+            details: [["class", cluster.classes.join(" ")]]
+          )
+        }
+      )]
+    end
+
     private
+
+    def framing_lines
+      [
+        "The same multi-class list applied to the same tag in many places —",
+        "classic AI-paste pattern. Consider extracting a shared component or",
+        "an @apply rule. Threshold: >= #{@min_classes} classes, >= #{@min_occurrences} occurrences."
+      ]
+    end
 
     def view_files
       paths = VIEW_PATTERNS.flat_map { |g| Dir.glob(@root.join(g)) }.map { |p| Pathname(p) }.uniq
@@ -174,9 +203,7 @@ module Guardrails
         :suggestion,
         "class-itis (#{clusters.length} #{noun}, #{total_occurrences} occurrences)"
       )
-      @output.puts "  The same multi-class list applied to the same tag in many places —"
-      @output.puts "  classic AI-paste pattern. Consider extracting a shared component or"
-      @output.puts "  an @apply rule. Threshold: >= #{@min_classes} classes, >= #{@min_occurrences} occurrences."
+      framing_lines.each { |line| @output.puts "  #{line}" }
 
       clusters.each do |cluster|
         @output.puts ""

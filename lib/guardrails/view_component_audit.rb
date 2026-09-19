@@ -2,6 +2,7 @@
 
 require "pathname"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   class ViewComponentAudit
@@ -68,7 +69,59 @@ module Guardrails
       orphans
     end
 
+    # Detector-agnostic view of `result` (see Report::Finding). Missing
+    # previews point at the component class file so there's somewhere
+    # to jump to.
+    def categories(result)
+      [
+        Report::Category.new(
+          name: "missing previews", severity: :warning,
+          framing: missing_previews_framing(result.missing_previews.length).join(" "),
+          findings: result.missing_previews.map { |name|
+            Report::Finding.new(
+              category: "missing previews", severity: :warning,
+              title: "missing preview: #{name}_component", suggestion: missing_preview_suggestion(name),
+              locations: [Report::Location.new(file: "#{COMPONENT_DIR}/#{name}_component.rb")]
+            )
+          }
+        ),
+        Report::Category.new(
+          name: "orphan slots", severity: :warning, framing: ORPHAN_SLOTS_FRAMING.join(" "),
+          findings: result.orphan_slots.map { |o|
+            Report::Finding.new(
+              category: "orphan slots", severity: :warning,
+              title: "orphan slot: #{o.component}_component##{o.slot} (#{o.slot_kind})",
+              suggestion: orphan_slot_suggestion(o),
+              locations: [Report::Location.new(file: o.file, line: o.line)]
+            )
+          }
+        )
+      ].reject { |c| c.findings.empty? }
+    end
+
     private
+
+    ORPHAN_SLOTS_FRAMING = [
+      "renders_one / renders_many declared in the component class but never",
+      "referenced in the template. Either reference the slot or remove the",
+      "declaration."
+    ].freeze
+
+    def missing_previews_framing(count)
+      noun = count == 1 ? "component" : "components"
+      [
+        "Component classes without a corresponding Lookbook preview file.",
+        "Add #{noun} previews so the component is discoverable + visually testable."
+      ]
+    end
+
+    def missing_preview_suggestion(name)
+      "create test/components/previews/#{name}_component_preview.rb (or lookbook/previews/...)"
+    end
+
+    def orphan_slot_suggestion(slot)
+      "reference :#{slot.slot} in the template, or remove the #{slot.slot_kind} declaration"
+    end
 
     def component_files
       base = @root.join(COMPONENT_DIR)
@@ -141,12 +194,11 @@ module Guardrails
           :warning,
           "view_components missing previews (#{result.missing_previews.length} #{noun})"
         )
-        @output.puts "  Component classes without a corresponding Lookbook preview file."
-        @output.puts "  Add #{noun} previews so the component is discoverable + visually testable."
+        missing_previews_framing(result.missing_previews.length).each { |line| @output.puts "  #{line}" }
         result.missing_previews.each do |name|
           @output.puts ""
           @output.puts "  #{@style.severity(:warning, "missing preview: #{name}_component")}"
-          @output.puts "    #{@style.suggestion("create test/components/previews/#{name}_component_preview.rb (or lookbook/previews/...)")}"
+          @output.puts "    #{@style.suggestion(missing_preview_suggestion(name))}"
         end
       end
 
@@ -157,14 +209,12 @@ module Guardrails
           :warning,
           "view_components orphan slots (#{result.orphan_slots.length} #{noun})"
         )
-        @output.puts "  renders_one / renders_many declared in the component class but never"
-        @output.puts "  referenced in the template. Either reference the slot or remove the"
-        @output.puts "  declaration."
+        ORPHAN_SLOTS_FRAMING.each { |line| @output.puts "  #{line}" }
         result.orphan_slots.each do |o|
           @output.puts ""
           header = "orphan slot: #{o.component}_component##{o.slot} (#{o.slot_kind})"
           @output.puts "  #{@style.severity(:warning, header)}"
-          @output.puts "    #{@style.suggestion("reference :#{o.slot} in the template, or remove the #{o.slot_kind} declaration")}"
+          @output.puts "    #{@style.suggestion(orphan_slot_suggestion(o))}"
           @output.puts "    #{@style.location("#{o.file}:#{o.line}")}"
         end
       end

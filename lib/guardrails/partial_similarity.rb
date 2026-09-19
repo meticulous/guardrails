@@ -4,6 +4,7 @@ require "pathname"
 require "set"
 require_relative "erb_parser"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   class PartialSimilarity
@@ -176,7 +177,35 @@ module Guardrails
       groups.sort_by { |g| -g[:files].size }
     end
 
+    # Detector-agnostic view of `findings` (see Report::Finding). One
+    # finding per pair — the unit the summary counts — rather than per
+    # connected group the way the text report condenses them.
+    def categories(findings)
+      return [] if findings.empty?
+
+      [Report::Category.new(
+        name: "similar partials", severity: :suggestion, framing: framing_lines.join(" "),
+        findings: findings.map { |f|
+          Report::Finding.new(
+            category: "similar partials", severity: :suggestion,
+            title: "#{format('%.2f', f.score)} similar: #{f.file_a} ↔ #{f.file_b}",
+            suggestion: suggestion_for_pair({ score_max: f.score }),
+            locations: [Report::Location.new(file: f.file_a), Report::Location.new(file: f.file_b)],
+            details: [["tags", "#{f.tag_count_a} / #{f.tag_count_b}"]]
+          )
+        }
+      )]
+    end
+
     private
+
+    def framing_lines
+      [
+        "Templates with >= #{@threshold} structural similarity. Likely duplicates;",
+        "consider extracting the common shape into a partial or parameterizing",
+        "one with locals to subsume the others."
+      ]
+    end
 
     def collect_partials
       PARTIAL_PATTERNS
@@ -212,9 +241,7 @@ module Guardrails
         :suggestion,
         "similar partials (#{groups.length} #{group_noun}, #{findings.length} pairs, #{total_files} files)"
       )
-      @output.puts "  Templates with >= #{@threshold} structural similarity. Likely duplicates;"
-      @output.puts "  consider extracting the common shape into a partial or parameterizing"
-      @output.puts "  one with locals to subsume the others."
+      framing_lines.each { |line| @output.puts "  #{line}" }
 
       groups.each do |group|
         @output.puts ""

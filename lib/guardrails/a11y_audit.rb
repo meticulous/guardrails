@@ -4,6 +4,7 @@ require "pathname"
 require "set"
 require_relative "erb_parser"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   # Static a11y checks that don't require a browser — element-level rules
@@ -43,7 +44,31 @@ module Guardrails
       findings
     end
 
+    # Detector-agnostic view of `findings` (see Report::Finding).
+    def categories(findings)
+      return [] if findings.empty?
+
+      [Report::Category.new(
+        name: "a11y (static)", severity: :error, framing: FRAMING.join(" "),
+        findings: findings.map { |f|
+          Report::Finding.new(
+            category: "a11y (static)", severity: :error,
+            title: "#{f.rule}: #{f.snippet.to_s[0, 60]}",
+            suggestion: SUGGESTION_FOR_RULE[f.rule.to_s],
+            locations: [Report::Location.new(file: f.file, line: f.line, column: f.column)],
+            snippet: f.snippet
+          )
+        }
+      )]
+    end
+
     private
+
+    FRAMING = [
+      "Element-level a11y rules answerable from view source — missing alt text,",
+      "unnamed buttons, unlabeled inputs, link without name. Full WCAG coverage",
+      "needs runtime checks; layer axe-core via AXE_JSON= for that."
+    ].freeze
 
     def view_files
       SCAN_PATTERNS
@@ -249,9 +274,7 @@ module Guardrails
       noun = findings.length == 1 ? "issue" : "issues"
       @output.puts ""
       @output.puts @style.section_heading(:error, "a11y (#{findings.length} static #{noun})")
-      @output.puts "  Element-level a11y rules answerable from view source — missing alt text,"
-      @output.puts "  unnamed buttons, unlabeled inputs, link without name. Full WCAG coverage"
-      @output.puts "  needs runtime checks; layer axe-core via AXE_JSON= for that."
+      FRAMING.each { |line| @output.puts "  #{line}" }
 
       findings.each do |f|
         @output.puts ""
