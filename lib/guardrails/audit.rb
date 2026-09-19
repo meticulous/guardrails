@@ -7,6 +7,7 @@ require "yaml"
 require_relative "erb_parser"
 require_relative "report/style"
 require_relative "report/finding"
+require_relative "report/severity"
 
 module Guardrails
   class Audit
@@ -71,7 +72,9 @@ module Guardrails
       flood-color lighting-color stop-color
     ].freeze
 
-    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false, style: nil)
+    def initialize(root:, output: $stdout, suggest: false, format: :text, apply: false, style: nil,
+                   min_severity: Report::Severity::DEFAULT)
+      @min_severity = min_severity
       @root = Pathname(root)
       @output = output
       @suggest = suggest
@@ -82,7 +85,12 @@ module Guardrails
     end
 
     def run
-      violations = collect_files.flat_map { |file| scan_file(file) }
+      # Filtered before anything else sees them, so the report, the
+      # SUGGEST checklist, and the returned list (→ exit code, JSON)
+      # all agree on what this run was about.
+      violations = collect_files.flat_map { |file| scan_file(file) }.select do |v|
+        Report::Severity.include?(SEVERITY_FOR_TYPE.fetch(v.type, :warning), @min_severity)
+      end
       print_report(violations)
       remaining = @apply ? apply_auto_fixes(violations) : violations
       write_suggestions(remaining) if @suggest

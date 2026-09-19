@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "tmpdir"
+require "fileutils"
+require "json"
 require "guardrails/report/run"
 
 RSpec.describe Guardrails::Report::Run do
@@ -119,6 +121,74 @@ RSpec.describe Guardrails::Report::Run do
       expect(described_class.truthy?("YES")).to be(true)
       expect(described_class.truthy?("0")).to be(false)
       expect(described_class.truthy?(nil)).to be(false)
+    end
+  end
+
+  describe "min_severity" do
+    let(:errors_only) { described_class.new(root: root, min_severity: :error).call }
+    let(:no_suggestions) { described_class.new(root: root, min_severity: :warning).call }
+
+    it "checks everything by default" do
+      expect(run.min_severity).to eq(:suggestion)
+      expect(run.muted_severities).to eq([])
+    end
+
+    it "keeps only errors at :error — in findings, summary, JSON, and the printed body alike" do
+      expect(errors_only.findings.map(&:severity).uniq).to eq([:error])
+      expect(errors_only.categories.map(&:name)).to eq(["raw_color", "a11y (static)", "tailwind_arbitrary"])
+      expect(errors_only.summary_entries.reject { |e| e.count.zero? }.map(&:severity).uniq).to eq([:error])
+      expect(errors_only.to_h[:summary]).to include(violations: 5, a11y: 3, stimulus_orphaned: 0, similar_partials: 0,
+                                                    missing_previews: 0)
+      expect(errors_only.body).not_to match(/! WARNING|i SUGGEST|\[warning\]|\[suggest\]|inline_style|helper_recommended/)
+      expect(errors_only.muted_severities).to eq(%i[warning suggestion])
+    end
+
+    it "drops only suggestions at :warning" do
+      expect(no_suggestions.findings.map(&:severity).uniq).to eq(%i[error warning])
+      expect(no_suggestions.findings.length).to eq(18)
+      expect(no_suggestions.similarity).to eq([])
+      expect(no_suggestions.stimulus.orphaned).to eq(["missing"])
+    end
+
+    it "doesn't run detectors that can only produce muted findings" do
+      expect(Guardrails::PartialSimilarity).not_to receive(:new)
+      expect(Guardrails::CrossCodebasePatterns).not_to receive(:new)
+      expect(Guardrails::StimulusAudit).not_to receive(:new)
+
+      errors_only
+    end
+
+    it "lets a CI gate pass on a project whose only findings are below the floor" do
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "app/views"))
+        File.write(File.join(dir, "app/views/page.html.erb"), %(<p style="margin: 3px">hi</p>\n))
+
+        expect(described_class.new(root: dir).call).to be_failing
+        expect(described_class.new(root: dir, min_severity: :error).call).not_to be_failing
+      end
+    end
+
+    it "filters deep a11y findings by their axe impact" do
+      axe = [{ "url" => "http://localhost/", "violations" => [
+        { "id" => "color-contrast", "impact" => "serious", "description" => "contrast", "nodes" => [{ "target" => [".a"] }] },
+        { "id" => "region", "impact" => "moderate", "description" => "landmark", "nodes" => [{ "target" => [".b"] }] },
+        { "id" => "tabindex", "impact" => "minor", "description" => "tabindex", "nodes" => [{ "target" => [".c"] }] }
+      ] }]
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "axe.json")
+        File.write(path, JSON.generate(axe))
+        rules = ->(floor) { described_class.new(root: dir, axe_json: path, min_severity: floor).call.a11y_deep.map(&:rule) }
+
+        expect(rules.(:suggestion)).to eq(%w[color-contrast region tabindex])
+        expect(rules.(:warning)).to eq(%w[color-contrast region])
+        expect(rules.(:error)).to eq(%w[color-contrast])
+      end
+    end
+
+    it "comes from SEVERITY via from_env, and rejects values it doesn't know" do
+      expect(described_class.from_env(root: root, env: { "SEVERITY" => "error" }).min_severity).to eq(:error)
+      expect(described_class.from_env(root: root, env: {}).min_severity).to eq(:suggestion)
+      expect { described_class.from_env(root: root, env: { "SEVERITY" => "errror" }) }.to raise_error(ArgumentError)
     end
   end
 

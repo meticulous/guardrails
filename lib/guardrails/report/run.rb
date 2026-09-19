@@ -13,6 +13,7 @@ require_relative "../a11y_deep"
 require_relative "../visual_diff"
 require_relative "summary"
 require_relative "finding"
+require_relative "severity"
 require_relative "../configuration"
 
 module Guardrails
@@ -33,11 +34,13 @@ module Guardrails
       TRUTHY = %w[1 true yes].freeze
 
       attr_reader :violations, :stimulus, :similarity, :view_components,
-                  :a11y, :patterns, :classitis, :a11y_deep, :visual_diff
+                  :a11y, :patterns, :classitis, :a11y_deep, :visual_diff, :min_severity
 
       # Builds a Run from the documented env vars (SUGGEST, APPLY,
       # AXE_JSON, VISUAL_DIFF*, SIMILARITY_THRESHOLD, PATTERN_*,
-      # CLASSITIS_*).
+      # CLASSITIS_*, SEVERITY). Raises ArgumentError on a SEVERITY it
+      # doesn't recognize — a typo there would otherwise silently
+      # un-gate a CI check.
       def self.from_env(root:, style: nil, env: ENV)
         # Visual-diff is opt-in (baselines need deliberate setup). Enabled
         # when either VISUAL_DIFF=1 is set in the env (sidecar mode) or
@@ -66,7 +69,8 @@ module Guardrails
         new(root: root, style: style,
             suggest: truthy?(env["SUGGEST"]), apply: truthy?(env["APPLY"]),
             axe_json: env["AXE_JSON"], visual_diff: visual_diff_on,
-            similarity: similarity, patterns: patterns, classitis: classitis)
+            similarity: similarity, patterns: patterns, classitis: classitis,
+            min_severity: Severity.parse(env["SEVERITY"]))
       end
 
       def self.truthy?(value)
@@ -80,7 +84,9 @@ module Guardrails
       # uncolored output (what JSON mode wants — the body is discarded).
       def initialize(root:, style: nil, suggest: false, apply: false,
                      axe_json: nil, visual_diff: false,
-                     similarity: {}, patterns: {}, classitis: {})
+                     similarity: {}, patterns: {}, classitis: {},
+                     min_severity: Severity::DEFAULT)
+        @min_severity = min_severity
         @root = Pathname(root)
         @style = style
         @suggest = suggest
@@ -94,18 +100,33 @@ module Guardrails
       end
 
       def call
-        @violations = detect(Audit.new(**common, suggest: @suggest, apply: @apply, format: :text))
-        @stimulus = detect(StimulusAudit.new(**common))
-        @similarity = detect(PartialSimilarity.new(**common, **@similarity_opts))
-        @view_components = detect(ViewComponentAudit.new(**common))
+        # Detectors whose findings all sit below the severity floor
+        # aren't run at all — SEVERITY=error skips the two slowest
+        # (similarity, patterns) rather than computing results to
+        # discard. Audit and A11yDeep emit mixed severities, so they
+        # always run and filter internally.
+        @violations = detect(Audit.new(**common, suggest: @suggest, apply: @apply, format: :text,
+                                                 min_severity: @min_severity))
+        @stimulus = wanted?(:warning) ? detect(StimulusAudit.new(**common)) : StimulusAudit::Result.new(orphaned: [], dead: [])
+        @similarity = wanted?(:suggestion) ? detect(PartialSimilarity.new(**common, **@similarity_opts)) : []
+        @view_components = if wanted?(:warning) then detect(ViewComponentAudit.new(**common))
+                           else ViewComponentAudit::Result.new(missing_previews: [], orphan_slots: [])
+                           end
         @a11y = detect(A11yAudit.new(**common))
-        @patterns = detect(CrossCodebasePatterns.new(**common, **@pattern_opts))
-        @classitis = detect(ClassItis.new(**common, **@classitis_opts))
-        @a11y_deep_runner = @axe_json ? A11yDeep.new(input: @axe_json, output: @sink, style: @style) : nil
+        @patterns = wanted?(:suggestion) ? detect(CrossCodebasePatterns.new(**common, **@pattern_opts)) : []
+        @classitis = wanted?(:suggestion) ? detect(ClassItis.new(**common, **@classitis_opts)) : []
+        @a11y_deep_runner = if @axe_json
+                              A11yDeep.new(input: @axe_json, output: @sink, style: @style, min_severity: @min_severity)
+                            end
         @a11y_deep = @a11y_deep_runner ? detect(@a11y_deep_runner) : []
         @visual_diff_runner = @visual_diff_on ? VisualDiff.new(**common) : nil
         @visual_diff = @visual_diff_runner ? detect(@visual_diff_runner) : []
         self
+      end
+
+      # Severities this run didn't look at (empty by default).
+      def muted_severities
+        Severity.muted(@min_severity)
       end
 
       # Every finding as detector-agnostic data (see Report::Finding),
@@ -206,6 +227,10 @@ module Guardrails
         result = detector.run
         (@detected ||= []) << [detector, result]
         result
+      end
+
+      def wanted?(severity)
+        Severity.include?(severity, @min_severity)
       end
 
       def common

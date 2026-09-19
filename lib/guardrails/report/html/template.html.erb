@@ -107,7 +107,7 @@
 </header>
 
 <main class="wrap">
-  <p class="meta"><%= pluralize(findings.length, "finding") %> across <%= pluralize(@categories.length, "category", "categories") %> · <span class="mono"><%= h @root %></span> · generated <%= h @generated_at.strftime("%Y-%m-%d %H:%M") %> by ui_guardrails <%= h Guardrails::VERSION %></p>
+  <p class="meta"><%= pluralize(findings.length, "finding") %> across <%= pluralize(@categories.length, "category", "categories") %> · <span class="mono"><%= h @root %></span> · generated <%= h @generated_at.strftime("%Y-%m-%d %H:%M") %> by ui_guardrails <%= h Guardrails::VERSION %><% if muted_note %> · <strong><%= h muted_note %></strong><% end %></p>
 
   <%- if @categories.empty? -%>
   <p class="clean">✓ No findings — the audit is clean.</p>

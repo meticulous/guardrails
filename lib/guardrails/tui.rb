@@ -90,7 +90,7 @@ module Guardrails
     end
 
     def open_web_report
-      path = Report::Html.new(categories: @run.categories, root: @root).write
+      path = Report::Html.new(categories: @run.categories, root: @root, muted: @run.muted_severities).write
       opener = Editor.opener(path.to_s)
       opened = opener && system(*opener, out: File::NULL, err: File::NULL)
       @state.notice = "#{opened ? 'Opened' : 'Wrote'} #{path.relative_path_from(Pathname(@root).expand_path)}"

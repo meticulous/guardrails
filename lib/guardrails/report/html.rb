@@ -34,7 +34,10 @@ module Guardrails
 
       SEVERITY_LABEL = { error: "Error", warning: "Warning", suggestion: "Suggestion" }.freeze
 
-      def initialize(categories:, root:, generated_at: Time.now)
+      # `muted` — severities the run was told not to check (SEVERITY=).
+      # Stated on the page so a filtered report can't pass for a full one.
+      def initialize(categories:, root:, generated_at: Time.now, muted: [])
+        @muted = muted
         @categories = categories
         @root = Pathname(root).expand_path
         @generated_at = generated_at
@@ -72,6 +75,12 @@ module Guardrails
           group = @categories.select { |c| c.severity == severity }
           [severity, group] unless group.empty?
         end
+      end
+
+      def muted_note
+        return nil if @muted.empty?
+
+        "#{@muted.map { |s| "#{SEVERITY_LABEL[s].downcase}s" }.join(' and ')} not checked"
       end
 
       def severity_count(severity)

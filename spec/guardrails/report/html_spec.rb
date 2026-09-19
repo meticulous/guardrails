@@ -31,6 +31,13 @@ RSpec.describe Guardrails::Report::Html do
     expect(html).to include("Guardrails audit — demo", "2026-09-19 14:30", "ui_guardrails #{Guardrails::VERSION}")
   end
 
+  it "says so when the run skipped severities, and says nothing otherwise" do
+    filtered = described_class.new(categories: categories, root: root, muted: %i[warning suggestion]).render
+
+    expect(filtered).to include("<strong>warnings and suggestions not checked</strong>")
+    expect(html).not_to include("not checked")
+  end
+
   it "credits Meticulous in the footer" do
     expect(html).to include('built by <a href="https://meticulous.com" rel="noopener">Meticulous</a> with love')
   end
