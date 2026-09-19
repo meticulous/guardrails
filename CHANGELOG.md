@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-19
+
 Navigating findings. 1.1.0 made each finding actionable; this makes a thousand of them browsable. Two new front-ends over the same audit run, and the data model that makes them possible. No detector logic changes; text and JSON output are byte-identical to 1.2.0.
 
 ### Added
@@ -25,6 +27,8 @@ Navigating findings. 1.1.0 made each finding actionable; this makes a thousand o
 ### Security notes
 
 - The TUI strips control characters from everything it displays, so an audited file containing terminal escape sequences can't drive the terminal. Editor commands are argv arrays, never shell strings. The HTML report escapes all project-derived content. Each has a spec with hostile input.
+
+[1.3.0]: https://github.com/meticulous/guardrails/releases/tag/v1.3.0
 
 ## [1.2.0] - 2026-09-19
 

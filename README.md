@@ -4,7 +4,7 @@ A Rails toolset that prevents UI drift in AI-assisted applications. Static audit
 
 Built and maintained by [Meticulous](https://meticulous.com).
 
-**Current release:** 1.2.0 — V0 + V1 + V2 complete, published on [RubyGems.org as `ui_guardrails`](https://rubygems.org/gems/ui_guardrails). The Ruby module stays `Guardrails` (so `require "guardrails"` is unchanged) — only the gem package name on rubygems carries the `ui_` prefix, to clear RubyGems' similarity rule against the unrelated [`guard-rails`](https://rubygems.org/gems/guard-rails) gem. See [`doc/ROADMAP.md`](doc/ROADMAP.md) for status, [`CHANGELOG.md`](CHANGELOG.md) for the full naming rationale.
+**Current release:** 1.3.0 — V0 + V1 + V2 complete, published on [RubyGems.org as `ui_guardrails`](https://rubygems.org/gems/ui_guardrails). The Ruby module stays `Guardrails` (so `require "guardrails"` is unchanged) — only the gem package name on rubygems carries the `ui_` prefix, to clear RubyGems' similarity rule against the unrelated [`guard-rails`](https://rubygems.org/gems/guard-rails) gem. See [`doc/ROADMAP.md`](doc/ROADMAP.md) for status, [`CHANGELOG.md`](CHANGELOG.md) for the full naming rationale.
 
 ---
 
