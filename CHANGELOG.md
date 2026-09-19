@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-19
+
+Navigating findings. 1.1.0 made each finding actionable; this makes a thousand of them browsable. Two new front-ends over the same audit run, and the data model that makes them possible. No detector logic changes; text and JSON output are byte-identical to 1.2.0.
+
+### Added
+
+- **`rake guardrails:tui` — interactive findings browser.** Opens on the severity roll-up; `⏎` drills category → findings → one finding with its suggestion, all locations, and the surrounding source. `tab` regroups by file (the "file-grouped view" follow-up from 1.1.0), `/` filters live, `o` opens the location in your editor at the right line, `w` opens the HTML report, `r` re-runs. Zero new dependencies — `io/console` only. Honors `NO_COLOR`. Refuses to start without a TTY and points at `guardrails:audit` instead. Ignores `APPLY` / `SUGGEST`: browsing never rewrites files.
+
+- **`FORMAT=html` — self-contained HTML report.** `tmp/guardrails/audit.html` by default, `OUTPUT=` to override. Roll-up, per-category framing, every finding with suggestion / locations / snippet, live filter, severity toggles, light + dark. All inline, no network — works from disk or as a CI artifact. Opt-in editor links (VS Code, Cursor, Zed, TextMate, RubyMine) chosen in the page and remembered per browser.
+
+- **`Guardrails::Report::Run`** — runs every detector once and holds the results, summary entries, JSON payload, and exit verdict. `Run.from_env` is now the single place the audit's env vars are parsed. The rake task previously did all of this inline, twice (once per output format).
+
+- **`Guardrails::Report::Finding` / `Location` / `Category`** — detector-agnostic finding data. Every detector gains a public `categories(result)` returning them, with the same titles and suggestions the text report prints (shared code, not copies). `Run#categories` / `Run#findings` aggregate across detectors in summary order.
+
+- **Locations where the text report has none.** Normalized findings point somewhere even when the printed report only names a thing: orphaned Stimulus controllers carry every view line that references them, dead controllers their JS file, missing previews their component class. Pattern and class-itis findings carry *all* occurrences and the full class list rather than the terminal-width-capped versions.
+
+- **`GUARDRAILS_EDITOR`** env var — editor override for the TUI, ahead of `$VISUAL` / `$EDITOR`.
+
+### Security notes
+
+- The TUI strips control characters from everything it displays, so an audited file containing terminal escape sequences can't drive the terminal. Editor commands are argv arrays, never shell strings. The HTML report escapes all project-derived content. Each has a spec with hostile input.
+
+[1.3.0]: https://github.com/meticulous/guardrails/releases/tag/v1.3.0
+
 ## [1.2.0] - 2026-09-19
 
 Compatibility-floor release. No detector, report, or API changes — if you're on Ruby 3.2/3.3 or Rails 7.1, stay on 1.1.0.

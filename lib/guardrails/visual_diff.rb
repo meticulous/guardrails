@@ -3,6 +3,7 @@
 require "pathname"
 require_relative "configuration"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   # Consumes screenshot-diff tool output and folds findings into the
@@ -68,7 +69,39 @@ module Guardrails
       adapter.collect
     end
 
+    # Detector-agnostic view of `findings` (see Report::Finding). The
+    # diff image is the thing to open, so it leads the locations.
+    def categories(findings)
+      return [] if findings.empty?
+
+      [Report::Category.new(
+        name: "visual diff", severity: :error, framing: FRAMING.join(" "),
+        findings: findings.map { |f|
+          Report::Finding.new(
+            category: "visual diff", severity: :error,
+            title: "#{ratio_label(f)} #{f.scenario}#{f.viewport ? " (#{f.viewport})" : ""}",
+            suggestion: SUGGESTION,
+            locations: [f.diff_path, f.baseline_path].compact.map { |path| Report::Location.new(file: path) },
+            details: [["baseline", f.baseline_path], ["diff", f.diff_path], ["url", f.url], ["selector", f.selector]]
+                     .reject { |_, v| v.nil? }
+          )
+        }
+      )]
+    end
+
     private
+
+    FRAMING = [
+      "Screenshot-diff tool flagged these scenarios. Review each diff image",
+      "and either accept the new baseline (commit the updated screenshot) or",
+      "fix the regression that caused the visual change."
+    ].freeze
+
+    SUGGESTION = "compare baseline ↔ diff; accept the new baseline or fix the regression"
+
+    def ratio_label(finding)
+      finding.mismatch_ratio.nil? ? "[diff present]" : "[#{(finding.mismatch_ratio * 100).round(2)}% mismatch]"
+    end
 
     def adapter
       case @adapter_name
@@ -104,17 +137,14 @@ module Guardrails
         :error,
         "visual diff (#{findings.length} #{noun}, adapter: #{@adapter_name}, threshold: #{@threshold})"
       )
-      @output.puts "  Screenshot-diff tool flagged these scenarios. Review each diff image"
-      @output.puts "  and either accept the new baseline (commit the updated screenshot) or"
-      @output.puts "  fix the regression that caused the visual change."
+      FRAMING.each { |line| @output.puts "  #{line}" }
 
       findings.each do |f|
-        ratio_label = f.mismatch_ratio.nil? ? "[diff present]" : "[#{(f.mismatch_ratio * 100).round(2)}% mismatch]"
         suffix = f.viewport ? " (#{f.viewport})" : ""
 
         @output.puts ""
-        @output.puts "  #{@style.severity(:error, "#{ratio_label} #{f.scenario}#{suffix}")}"
-        @output.puts "    #{@style.suggestion("compare baseline ↔ diff; accept the new baseline or fix the regression")}"
+        @output.puts "  #{@style.severity(:error, "#{ratio_label(f)} #{f.scenario}#{suffix}")}"
+        @output.puts "    #{@style.suggestion(SUGGESTION)}"
         @output.puts "    #{@style.location("baseline: #{f.baseline_path}")}" if f.baseline_path
         @output.puts "    #{@style.location("diff:     #{f.diff_path}")}" if f.diff_path
         @output.puts "    #{@style.location("url:      #{f.url}")}" if f.url

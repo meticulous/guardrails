@@ -6,6 +6,7 @@ require "stringio"
 require "yaml"
 require_relative "erb_parser"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   class Audit
@@ -86,6 +87,32 @@ module Guardrails
       remaining = @apply ? apply_auto_fixes(violations) : violations
       write_suggestions(remaining) if @suggest
       remaining
+    end
+
+    # Detector-agnostic view of `violations` (see Report::Finding) for
+    # front-ends that list and link findings rather than print them.
+    # One Category per violation type, in the text report's order.
+    def categories(violations)
+      by_type = violations.group_by(&:type)
+      (TYPE_ORDER + (by_type.keys - TYPE_ORDER)).filter_map do |type|
+        list = by_type[type]
+        next if list.nil? || list.empty?
+
+        severity = SEVERITY_FOR_TYPE.fetch(type, :warning)
+        auto_fix = AUTO_FIXABLE_TYPES.include?(type)
+        Report::Category.new(
+          name: type.to_s, severity: severity, framing: FRAMING_FOR_TYPE[type], auto_fix: auto_fix,
+          findings: list.map { |v|
+            Report::Finding.new(
+              category: type.to_s, severity: severity, auto_fix: auto_fix,
+              title: "#{type}: #{format_value(v)}",
+              suggestion: suggestion_for_violation(v),
+              locations: [Report::Location.new(file: v.file, line: v.line, column: v.column)],
+              snippet: v.snippet
+            )
+          }
+        )
+      end
     end
 
     private
@@ -459,10 +486,8 @@ module Guardrails
       # (a suggestion-shaped warning) and a11y (errors but grouped
       # separately because A11yAudit owns them — the audit rake task
       # threads them in via this same method).
-      type_order = %i[inline_style raw_color tailwind_arbitrary helper_recommended
-                      image_alt button_name link_name input_label]
       by_type = violations.group_by(&:type)
-      ordered = type_order + (by_type.keys - type_order)
+      ordered = TYPE_ORDER + (by_type.keys - TYPE_ORDER)
 
       ordered.each do |type|
         list = by_type[type] || []
@@ -471,6 +496,9 @@ module Guardrails
         print_violation_type(type, list)
       end
     end
+
+    TYPE_ORDER = %i[inline_style raw_color tailwind_arbitrary helper_recommended
+                    image_alt button_name link_name input_label].freeze
 
     SEVERITY_FOR_TYPE = {
       inline_style: :warning,

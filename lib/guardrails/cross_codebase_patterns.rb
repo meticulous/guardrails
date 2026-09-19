@@ -5,6 +5,7 @@ require "digest"
 require "set"
 require_relative "erb_parser"
 require_relative "report/style"
+require_relative "report/finding"
 
 module Guardrails
   # Finds recurring structural patterns across the codebase — element
@@ -98,7 +99,35 @@ module Guardrails
       dedupe_nested(patterns)
     end
 
+    # Detector-agnostic view of `patterns` (see Report::Finding). One
+    # finding per shape, carrying every occurrence — the text report
+    # caps the list for terminal width; this doesn't.
+    def categories(patterns)
+      return [] if patterns.empty?
+
+      [Report::Category.new(
+        name: "cross-codebase patterns", severity: :suggestion, framing: framing_lines.join(" "),
+        findings: patterns.map { |pattern|
+          Report::Finding.new(
+            category: "cross-codebase patterns", severity: :suggestion,
+            title: "shape: #{truncate_shape(pattern.shape)} (#{pattern.size} elements, #{pattern.count} occurrences)",
+            suggestion: suggestion_for(pattern),
+            locations: pattern.occurrences.map { |occ| Report::Location.new(file: occ.file, line: occ.line, column: occ.column) },
+            details: [["shape", pattern.shape]]
+          )
+        }
+      )]
+    end
+
     private
+
+    def framing_lines
+      [
+        "These element subtrees repeat #{@min_occurrences}+ times across your views and",
+        "components. Each is a candidate for extracting into a shared partial or",
+        "ViewComponent. Threshold: >= #{@min_size} elements, >= #{@min_occurrences} occurrences."
+      ]
+    end
 
     # Drop redundant inner shapes. When a table repeats N times, three
     # patterns end up with identical counts:
@@ -222,9 +251,7 @@ module Guardrails
         :suggestion,
         "cross-codebase patterns (#{patterns.length} #{noun}, #{total_occurrences} occurrences)"
       )
-      @output.puts "  These element subtrees repeat #{@min_occurrences}+ times across your views and"
-      @output.puts "  components. Each is a candidate for extracting into a shared partial or"
-      @output.puts "  ViewComponent. Threshold: >= #{@min_size} elements, >= #{@min_occurrences} occurrences."
+      framing_lines.each { |line| @output.puts "  #{line}" }
 
       patterns.each do |pattern|
         @output.puts ""
