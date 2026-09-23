@@ -51,6 +51,14 @@ module Guardrails
 
       def yaml_for(result, overrides)
         token_paths = DEFAULT_TOKEN_PATHS.fetch(result.strategy)
+        tokens = {
+          "strategy" => result.strategy.to_s,
+          "colors_file" => token_paths["colors_file"],
+          "type_scale_file" => token_paths["type_scale_file"]
+        }
+        tokens["tailwind_config"] = overrides[:tailwind_config] if overrides[:tailwind_config]
+        tokens["near_match_policy"] = overrides.fetch(:near_match_policy, "notify")
+        tokens["near_match_threshold"] = overrides.fetch(:near_match_threshold, 4)
         config = {
           "guardrails" => {
             "audit" => {
@@ -61,13 +69,7 @@ module Guardrails
               "source" => "app/assets/images/icons",
               "sprite_output" => "app/assets/images/icons/sprite.svg"
             },
-            "tokens" => {
-              "strategy" => result.strategy.to_s,
-              "colors_file" => token_paths["colors_file"],
-              "type_scale_file" => token_paths["type_scale_file"],
-              "near_match_policy" => overrides.fetch(:near_match_policy, "notify"),
-              "near_match_threshold" => overrides.fetch(:near_match_threshold, 4)
-            }
+            "tokens" => tokens
           }
         }
 

@@ -6,6 +6,7 @@ require_relative "init/stack_detector"
 require_relative "init/config_writer"
 require_relative "init/media_query_scaffolder"
 require_relative "init/prompter"
+require_relative "tokens"
 
 module Guardrails
   class Init
@@ -34,6 +35,7 @@ module Guardrails
       # Don't prompt the user if we know we won't write — keeps reruns from
       # asking questions whose answers will be discarded.
       overrides = config_writeable? ? collect_overrides : {}
+      overrides[:tailwind_config] = detected_tailwind_config
 
       written = ConfigWriter.new(@root, output: @output).write(result, overrides: overrides, force: @force)
       if written
@@ -86,6 +88,17 @@ module Guardrails
       value.to_s.split(",").map(&:strip).reject(&:empty?)
     end
 
+    # Relative path of the Tailwind v3 config when one exists somewhere
+    # other than the repo root (typically `config/tailwind.config.js`
+    # from tailwindcss-rails). Root-level configs are found without
+    # configuration, so they're left out of the generated yml.
+    def detected_tailwind_config
+      found = Tokens::TAILWIND_CONFIG_CANDIDATES.find { |relative| @root.join(relative).exist? }
+      return nil if found.nil? || found == Tokens::TAILWIND_CONFIG_CANDIDATES.first
+
+      found
+    end
+
     def scaffold_media_queries
       file = configured_colors_file
       status, message = MediaQueryScaffolder.new(file, output: @output).scaffold
@@ -110,6 +123,8 @@ module Guardrails
       @output.puts "  custom-property files: #{result.evidence[:custom_property_files]}"
       @output.puts "  SCSS-variable files:   #{result.evidence[:scss_variable_files]}"
       @output.puts "  raw-hex files:         #{result.evidence[:raw_hex_files]}"
+      tailwind = Tokens::TAILWIND_CONFIG_CANDIDATES.find { |relative| @root.join(relative).exist? }
+      @output.puts "Tailwind config: #{tailwind}" if tailwind
     end
   end
 end

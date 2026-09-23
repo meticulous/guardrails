@@ -115,6 +115,21 @@ RSpec.describe Guardrails::Init::ConfigWriter do
       expect(config["guardrails"]["audit"]["ignore"]).to eq(["lib/templates/legacy"])
     end
 
+    it "writes tokens.tailwind_config when the override is given" do
+      result = detection_result(strategy: :raw_hex)
+      overrides = { tailwind_config: "config/tailwind.config.js" }
+      described_class.new(root, output: StringIO.new).write(result, overrides: overrides)
+
+      expect(written_config["guardrails"]["tokens"]["tailwind_config"]).to eq("config/tailwind.config.js")
+    end
+
+    it "omits tokens.tailwind_config when no override is given" do
+      result = detection_result(strategy: :raw_hex)
+      described_class.new(root, output: StringIO.new).write(result)
+
+      expect(written_config["guardrails"]["tokens"]).not_to have_key("tailwind_config")
+    end
+
     it "overwrites an existing config when force is true" do
       root.join("guardrails.yml").write("# stale")
       output = StringIO.new
