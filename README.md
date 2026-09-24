@@ -125,7 +125,7 @@ Static AST walk over every `.html.erb` under `app/views/` and `app/components/` 
 
 - CSS custom properties in your configured `colors_file`
 - SCSS variables in the same
-- Tailwind v3 `tailwind.config.js` — flat colors and nested scales (`gray.50` → `gray-50`)
+- Tailwind v3 `tailwind.config.js` — flat colors and nested scales (`gray.50` → `gray-50`). Found automatically at the repo root or at `config/tailwind.config.js` (the `tailwindcss-rails` default); set `tokens.tailwind_config` for anything else (`.cjs`, `.ts`, monorepo paths)
 - Tailwind v4 `@theme {}` blocks — picked up by the CSS-custom-property scanner
 
 Then scans every other stylesheet for hex literals and reports drift, matching each to the closest defined token. Block + line comments are stripped before matching, preserving line/column positions so reports are accurate.
@@ -285,6 +285,10 @@ guardrails:
     # guessed wrong.
     colors_file: app/assets/stylesheets/tokens/_colors.css
     type_scale_file: app/assets/stylesheets/tokens/_type.css
+    # Optional. Tailwind v3 config to read theme colors from. Not needed
+    # for tailwind.config.js at the root or under config/ — init writes
+    # it for the latter, and both are discovered without it.
+    tailwind_config: config/tailwind.config.js
     # Per-channel R/G/B distance at which a near-match becomes a
     # "close enough to suggest" finding. 0 = exact only; 4 = default
     # (catches #0066ff ↔ #0067fe); 20+ = aggressive.

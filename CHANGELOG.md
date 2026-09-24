@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tailwind v3 configs under `config/` are now found.** `tailwindcss-rails` generates `config/tailwind.config.js` for every Tailwind v3 app, but `Guardrails::Tokens` only ever looked at the repo root — so on the most common Rails layout the theme colors were silently skipped, `guardrails:tokens` reported every brand hex as "no matching token", and the `tailwind_arbitrary` auto-fix had nothing to match against. Discovery now checks `tailwind.config.js` then `config/tailwind.config.js`, first match wins. The "no sources found" message names both locations.
+
+### Added
+
+- **`tokens.tailwind_config` in `guardrails.yml`** — explicit path to the Tailwind v3 config, for `.cjs` / `.ts` files or monorepo layouts that neither candidate covers. Takes precedence over discovery. `guardrails:init` writes it when the config lives under `config/`, and prints the config it found in the detection summary.
+
 ## [1.4.0] - 2026-09-19
 
 ### Added
