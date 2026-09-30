@@ -7,6 +7,22 @@ module Guardrails
   class Icons
     Violation = Struct.new(:type, :file, :line, :column, :snippet, keyword_init: true)
 
+    # Result of a full run. Struct with keyword_init keeps the Hash-style
+    # `result[:inline_svgs]` access existing consumers rely on (see
+    # spec/integration/demo_app_spec.rb) while adding a `violations?`
+    # predicate the rake task can gate `exit 1` on. Mirrors the shape
+    # of `StimulusAudit::Result` / `ViewComponentAudit::Result`.
+    #
+    # Dead icons are excluded from `violations?` on purpose: deleting an
+    # unused SVG file is a human decision (it may be genuinely used by a
+    # deploy path the scan can't see), so the audit reports them but
+    # doesn't fail the build over them.
+    Result = Struct.new(:inline_svgs, :dead_icons, :unknown_refs, keyword_init: true) do
+      def violations?
+        !inline_svgs.empty? || !unknown_refs.empty?
+      end
+    end
+
     DEFAULT_SOURCE = "app/assets/images/icons"
     DEFAULT_SPRITE_OUTPUT = "app/assets/images/icons/sprite.svg"
     DEFAULT_VIEWBOX = "0 0 24 24"
@@ -65,7 +81,11 @@ module Guardrails
       report_inline_svgs(violations)
       dead_report = report_dead_icons
       print_dead_report(dead_report)
-      { inline_svgs: violations, dead_icons: dead_report[:dead], unknown_refs: dead_report[:unknown] }
+      Result.new(
+        inline_svgs: violations,
+        dead_icons: dead_report[:dead],
+        unknown_refs: dead_report[:unknown]
+      )
     end
 
     def audit_inline_svgs

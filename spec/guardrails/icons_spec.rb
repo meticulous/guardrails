@@ -259,4 +259,60 @@ RSpec.describe Guardrails::Icons do
       expect(report[:dead]).to eq(["orphan"])
     end
   end
+
+  describe "Result#violations?" do
+    def write_view(relative, content)
+      full = root.join(relative)
+      full.dirname.mkpath
+      full.write(content)
+    end
+
+    it "is false when there are no findings" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-check"/></svg>'
+
+      result = run_icons
+      expect(result.violations?).to be false
+    end
+
+    it "is false when the only findings are dead icons (deleting is a human decision)" do
+      write_svg "app/assets/images/icons/orphan.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+
+      result = run_icons
+      expect(result.dead_icons).to eq(["orphan"])
+      expect(result.violations?).to be false
+    end
+
+    it "is true when an inline SVG is present in a view" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+
+      result = run_icons
+      expect(result.inline_svgs).not_to be_empty
+      expect(result.violations?).to be true
+    end
+
+    it "is true when a view references an icon that doesn't exist in source" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-typo"/></svg>'
+
+      result = run_icons
+      expect(result.unknown_refs).to eq(["typo"])
+      expect(result.violations?).to be true
+    end
+
+    it "keeps Hash-style [:key] access working (back-compat with pre-Result consumers)" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-check"/></svg>'
+
+      result = run_icons
+      # keyword_init Struct exposes [:key] as well as .key — matters
+      # because the demo integration spec has always used [:inline_svgs]
+      # / [:dead_icons] and would break if we regressed to a plain
+      # object without indexer.
+      expect(result[:inline_svgs]).to be_an(Array)
+      expect(result[:dead_icons]).to be_an(Array)
+      expect(result[:unknown_refs]).to be_an(Array)
+    end
+  end
 end

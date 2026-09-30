@@ -107,11 +107,12 @@ namespace :guardrails do
     exit 1 if runner.any_failing?(findings)
   end
 
-  desc "Generate SVG icon sprite and audit icon usage"
+  desc "Generate SVG icon sprite and audit icon usage — exits 1 on inline SVGs, unknown icon refs, or emoji/glyph icons"
   task :icons do
     require "guardrails/icons"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
-    Guardrails::Icons.new(root: root).run
+    result = Guardrails::Icons.new(root: root).run
+    exit 1 if result.violations?
   end
 
   desc "Audit design tokens and report drift"
