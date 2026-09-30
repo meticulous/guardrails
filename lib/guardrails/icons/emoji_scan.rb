@@ -2,6 +2,7 @@
 
 require "pathname"
 require "prism"
+require "set"
 
 module Guardrails
   class Icons
@@ -100,11 +101,14 @@ module Guardrails
       # encouraged; only the presence of the marker is required.
       INLINE_MARKER = /guardrails-ok:\s*emoji\b/
 
-      def initialize(root:, output: $stdout,
+      # `output:` is accepted for symmetry with other detectors but
+      # ignored — EmojiScan is pure return-a-value; the human-readable
+      # report belongs to Icons#report_emoji, which owns the output
+      # stream and the Style.
+      def initialize(root:, output: nil, # rubocop:disable Lint/UnusedMethodArgument
                      enabled: true, glyphs: true,
                      scan_paths: nil, allow_files: nil, allow_chars: nil)
         @root = Pathname(root)
-        @output = output
         @enabled = enabled
         @glyphs = glyphs
         @scan_paths = Array(scan_paths).compact.map(&:to_s)
@@ -193,7 +197,7 @@ module Guardrails
         return [] if raw.nil? || raw.empty?
 
         masked = mask_comments(raw, file)
-        suppressed_lines = suppressed_line_set(raw)
+        suppressed_lines = suppressed_line_set(raw, masked)
         relative_path = relative(file)
 
         violations = []
@@ -251,12 +255,21 @@ module Guardrails
       # is more accurate than any regex: it correctly ignores `#` inside
       # string literals, interpolation, and heredocs. A regex on `#.*$`
       # would false-mask `"#icon-check"` and break inline markers.
+      #
+      # NB: Prism's default `start_offset` / `end_offset` are BYTE
+      # offsets; indexing an array of characters with them misaligns
+      # after any multibyte content earlier in the file (an emoji-in-
+      # a-string followed by a `#` comment would leave the `#` region
+      # unmasked and the following line partly masked). Use the
+      # `_character_offset` accessors (Prism 1.5+, bundled with Ruby
+      # 3.4 as a default gem) which count characters and work with
+      # `String#[]=` on the source.
       def mask_ruby_comments(source)
         result = Prism.parse(source)
         chars = source.chars
         result.comments.each do |c|
-          start_off = c.location.start_offset
-          end_off = c.location.end_offset
+          start_off = c.location.start_character_offset
+          end_off = c.location.end_character_offset
           # Replace with spaces, but keep newlines so line numbers hold.
           (start_off...end_off).each do |i|
             chars[i] = " " unless chars[i] == "\n"
@@ -310,17 +323,26 @@ module Guardrails
       end
 
       # Build a set of line numbers to suppress based on inline
-      # markers. Marker on line N suppresses line N; marker on a
-      # comment line applies to the FOLLOWING line as well. Reads
-      # from the raw (unmasked) source because the marker text
-      # itself lives inside comments we're about to mask away.
-      def suppressed_line_set(source)
+      # markers. A marker suppresses the line it appears on. It ALSO
+      # suppresses the following line only when the marker line has no
+      # non-comment content — that's the "marker on the preceding
+      # line" case. A trailing marker (`FOO = "\u{1F4C4}" # guardrails-ok:
+      # emoji`) suppresses only its own line, so a legitimate finding
+      # on the next line still surfaces.
+      #
+      # `raw` carries the marker text (comments are erased in `masked`);
+      # `masked` tells us whether the marker line was a pure comment
+      # (its `strip.empty?` in the masked form) or a trailing comment
+      # after code (non-empty).
+      def suppressed_line_set(raw, masked)
         suppressed = Set.new
-        source.each_line.with_index(1) do |line, line_num|
+        masked_lines = masked.lines
+        raw.each_line.with_index(1) do |line, line_num|
           next unless line.match?(INLINE_MARKER)
 
           suppressed << line_num
-          suppressed << line_num + 1
+          masked_line = masked_lines[line_num - 1] || ""
+          suppressed << line_num + 1 if masked_line.strip.empty?
         end
         suppressed
       end

@@ -358,12 +358,14 @@ module Guardrails
     end
 
     def report_emoji_line(violation)
-      # `snippet` here IS the grapheme cluster (`📄`), which stripping
-      # is safe on — chomp would only touch \n / \r / \r\n.
+      # `snippet` here IS the grapheme cluster (`📄`), which chomp
+      # only touches \n / \r / \r\n, safe on the cluster.
       shown = violation.snippet.to_s.chomp
-      @output.puts "    #{violation.line}:#{violation.column}  #{shown}  (#{violation.codepoints}, #{violation.tier})"
+      location = @style.location("#{violation.line}:#{violation.column}")
+      meta = @style.location("(#{violation.codepoints}, #{violation.tier})")
+      @output.puts "    #{location}  #{shown}  #{meta}"
       hint = suggestion_for(violation)
-      @output.puts "      → #{hint}" if hint
+      @output.puts "      #{@style.suggestion(hint)}" if hint
     end
 
     # Sprite-name hint under SUGGEST=1, per the pasted spec. Only
@@ -385,10 +387,10 @@ module Guardrails
     # Look up the hint using the grapheme's base character (dropping
     # VS16 U+FE0F) so `📽️` and `📽` share a mapping. Multi-codepoint
     # emoji (ZWJ families, flags, keycaps) rarely have single-icon
-    # sprite equivalents; those return nil and get the "add one" hint.
+    # sprite equivalents; those miss SPRITE_NAME_HINTS entirely and
+    # fall through to the "add one" hint.
     def canonical_key(grapheme)
-      stripped = grapheme.to_s.tr("\u{FE0F}", "")
-      stripped.length == 1 ? stripped : stripped
+      grapheme.to_s.delete("\u{FE0F}")
     end
   end
 end

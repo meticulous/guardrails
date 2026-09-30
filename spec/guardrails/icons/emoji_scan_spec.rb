@@ -300,6 +300,30 @@ RSpec.describe Guardrails::Icons::EmojiScan do
       expect(violations.first.line).to eq(4)
     end
 
+    it "masks Ruby comments correctly after preceding multibyte content" do
+      # Byte-vs-char offset regression. Prism's default location
+      # offsets are BYTE offsets; if we index the char array with
+      # them, the mask starts N characters late when N bytes of
+      # multibyte content precede the comment. Real-world case: a
+      # string literal with an intentional emoji on the same line as
+      # a comment mentioning a different emoji.
+      #
+      # Line 1: A = "📄"  # 📦 in comment
+      # The literal 📄 (col 6) should flag; the 📦 inside `#` comment
+      # should NOT flag. With byte offsets the mask starts 3 chars
+      # late (📄 is 4 bytes = 4 chars in offset space but 1 char in
+      # position space) and 📦 survives → false positive.
+      write "app/helpers/x.rb", %(A = "\u{1F4C4}"  # \u{1F4E6} in comment\n)
+
+      violations = scan
+      expect(violations.length).to eq(1)
+      expect(violations.first.snippet).to eq("\u{1F4C4}")
+      expect(violations.first.line).to eq(1)
+      # 📄 sits inside the quoted literal — column 6 (A=1, space=2,
+      # ==3, space=4, "=5, 📄=6).
+      expect(violations.first.column).to eq(6)
+    end
+
     it "does NOT match \\p{Emoji} traps in comment-masked source (digits, #, *)" do
       write "app/models/x.rb", <<~RUBY
         class X
@@ -356,6 +380,25 @@ RSpec.describe Guardrails::Icons::EmojiScan do
       ERB
 
       expect(scan).to be_empty
+    end
+
+    it "does NOT extend a trailing-marker's suppression to the next line" do
+      # A same-line marker suppresses only its own line. The next
+      # line — even a legitimate finding — must still surface.
+      # Silent under-reporting on a linter is the bad failure mode:
+      # someone adds a marker to justify one existing emoji and
+      # accidentally hides the next one they add next week.
+      write "app/helpers/x.rb", <<~RUBY
+        module X
+          A = "\u{1F4C4}" # guardrails-ok: emoji intentional
+          B = "\u{1F4E6}"
+        end
+      RUBY
+
+      violations = scan
+      expect(violations.length).to eq(1)
+      expect(violations.first.line).to eq(3)
+      expect(violations.first.snippet).to eq("\u{1F4E6}")
     end
   end
 
