@@ -259,4 +259,171 @@ RSpec.describe Guardrails::Icons do
       expect(report[:dead]).to eq(["orphan"])
     end
   end
+
+  describe "Result#violations?" do
+    def write_view(relative, content)
+      full = root.join(relative)
+      full.dirname.mkpath
+      full.write(content)
+    end
+
+    it "is false when there are no findings" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-check"/></svg>'
+
+      result = run_icons
+      expect(result.violations?).to be false
+    end
+
+    it "is false when the only findings are dead icons (deleting is a human decision)" do
+      write_svg "app/assets/images/icons/orphan.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+
+      result = run_icons
+      expect(result.dead_icons).to eq(["orphan"])
+      expect(result.violations?).to be false
+    end
+
+    it "is true when an inline SVG is present in a view" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+
+      result = run_icons
+      expect(result.inline_svgs).not_to be_empty
+      expect(result.violations?).to be true
+    end
+
+    it "is true when a view references an icon that doesn't exist in source" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-typo"/></svg>'
+
+      result = run_icons
+      expect(result.unknown_refs).to eq(["typo"])
+      expect(result.violations?).to be true
+    end
+
+    it "keeps Hash-style [:key] access working (back-compat with pre-Result consumers)" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-check"/></svg>'
+
+      result = run_icons
+      # keyword_init Struct exposes [:key] as well as .key — matters
+      # because the demo integration spec has always used [:inline_svgs]
+      # / [:dead_icons] and would break if we regressed to a plain
+      # object without indexer.
+      expect(result[:inline_svgs]).to be_an(Array)
+      expect(result[:dead_icons]).to be_an(Array)
+      expect(result[:unknown_refs]).to be_an(Array)
+      expect(result[:emoji]).to be_an(Array)
+    end
+
+    it "is true when an emoji-icon is present in a scanned file" do
+      write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/views/a.html.erb", '<svg><use href="#icon-check"/></svg>'
+      # An emoji in a helper — the class of case that motivated this rule.
+      write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+
+      result = run_icons
+      expect(result.emoji).not_to be_empty
+      expect(result.violations?).to be true
+    end
+  end
+
+  describe "emoji integration + SUGGEST + FORMAT=json" do
+    def write_view(relative, content)
+      full = root.join(relative)
+      full.dirname.mkpath
+      full.write(content)
+    end
+
+    it "reports emoji findings grouped by file in text output" do
+      write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+      expect(output.string).to include("emoji icon")
+      expect(output.string).to include("app/helpers/foo.rb")
+      expect(output.string).to include("U+1F4C4")
+    end
+
+    it "prints a sprite-name suggestion under SUGGEST=1 when a matching icon exists" do
+      # 📄 → "file" or "document" per SPRITE_NAME_HINTS. Consumer's
+      # sprite has "document" — the suggestion should surface it.
+      write_svg "app/assets/images/icons/document.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+
+      output = StringIO.new
+      described_class.new(root: root, output: output, suggest: true).run
+      expect(output.string).to include(%(<use href="#icon-document"/>))
+    end
+
+    it "prints 'no sprite equivalent' under SUGGEST=1 when no matching icon exists" do
+      write_svg "app/assets/images/icons/unrelated.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+
+      output = StringIO.new
+      described_class.new(root: root, output: output, suggest: true).run
+      expect(output.string).to include("no sprite equivalent")
+    end
+
+    it "does not print sprite suggestions without SUGGEST=1" do
+      write_svg "app/assets/images/icons/document.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+      write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+      expect(output.string).not_to include("<use href=\"#icon-document\"/>")
+      expect(output.string).not_to include("no sprite equivalent")
+    end
+
+    it "honors icons.emoji.enabled: false via guardrails.yml" do
+      config = root.join("guardrails.yml")
+      config.write("guardrails:\n  icons:\n    emoji:\n      enabled: false\n")
+      write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+
+      result = run_icons
+      expect(result.emoji).to be_empty
+    end
+
+    it "honors icons.emoji.glyphs: false via guardrails.yml" do
+      config = root.join("guardrails.yml")
+      config.write("guardrails:\n  icons:\n    emoji:\n      glyphs: false\n")
+      write_view "app/helpers/foo.rb", <<~RUBY
+        module Foo
+          EMOJI = "\u{1F4C4}"
+          GLYPH = "\u{2713}"
+        end
+      RUBY
+
+      result = run_icons
+      # glyphs muted, emoji still flagged
+      expect(result.emoji.map(&:tier)).to eq([:emoji])
+    end
+
+    it "honors icons.emoji.allow_files via guardrails.yml (file skipped entirely)" do
+      config = root.join("guardrails.yml")
+      config.write("guardrails:\n  icons:\n    emoji:\n      allow_files:\n        - app/models/reaction.rb\n")
+      write_view "app/models/reaction.rb", <<~RUBY
+        class Reaction
+          QUICK = %w[\u{1F44D} \u{1F44E}].freeze
+        end
+      RUBY
+
+      expect(run_icons.emoji).to be_empty
+    end
+
+    describe "Result#to_h (for FORMAT=json)" do
+      it "serializes every category with .to_h on nested Violations" do
+        write_svg "app/assets/images/icons/check.svg", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+        write_view "app/views/a.html.erb", '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+        write_view "app/helpers/foo.rb", %(module Foo; def icon; "\u{1F4C4}"; end; end)
+
+        hash = run_icons.to_h
+        expect(hash[:summary][:inline_svgs]).to eq(1)
+        expect(hash[:summary][:emoji]).to eq(1)
+        # Nested violations should be Hashes, not Structs (JSON friendly)
+        expect(hash[:inline_svgs].first).to be_a(Hash)
+        expect(hash[:emoji].first).to be_a(Hash)
+        expect(hash[:emoji].first[:codepoints]).to eq("U+1F4C4")
+      end
+    end
+  end
 end

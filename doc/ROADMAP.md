@@ -1,6 +1,6 @@
 # Guardrails — Roadmap
 
-**Status:** **1.4.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases have been about reading the findings rather than producing more of them: inline suggestions (1.1.0), then an interactive browser + HTML report (1.3.0).
+**Status:** **1.5.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases have been about reading the findings rather than producing more of them: inline suggestions (1.1.0), then an interactive browser + HTML report (1.3.0), then a severity floor for CI adoption on existing codebases (1.4.0). 1.5.0 returns to producing findings — emoji-as-icon detection, the one drift vector that had zero coverage.
 **Last updated:** 2026-09-19
 
 ## Context
@@ -129,7 +129,9 @@ The planned roadmap ended at V2. Running the gem on real codebases (Patchvault: 
 | HTML report (`FORMAT=html`) | ✅ shipped (1.3.0) | One self-contained file, no server or assets — opens from disk or as a CI artifact. Generated rather than served: a mounted engine was more surface than the problem needed, and the Lookbook panel already covers in-app. |
 | File-grouped view | ✅ shipped (1.3.0) | `tab` in the TUI. Was a 1.1.0 follow-up. |
 | `SEVERITY=error\|warning` floor | ✅ shipped (1.4.0) | One severity floor across text report, exit code, JSON, HTML, and TUI. Skips detectors that can only produce muted findings. Filtered reports say what wasn't checked; unknown values abort. Supersedes the `--strict` flag dropped in V0. |
-| Lookbook panel on the new data layer | not started | The auto-registered panel still renders from its own `ComponentReport`; it could render `Report::Finding`s and pick up suggestions for free. |
+| Emoji + glyph icon detection | ✅ shipped (1.5.0) | `Guardrails::Icons::EmojiScan` catches emoji pictographs and Unicode-dingbat glyphs used as UI iconography — grapheme-cluster iteration (VS16 / ZWJ / flag / keycap count as one), range-first single-codepoint classification, per-file-type comment masking (Prism for Ruby, `<%# %>` for ERB, `//` `/* */` for JS/SCSS, `#` for YAML), `guardrails-ok: emoji` inline marker (first inline-escape convention in the gem), `allow_files` + `allow_chars` config, `SUGGEST=1` sprite-name hints. `guardrails:icons` also flipped to blocking — exit 1 on inline SVGs, unknown sprite refs, or emoji icons. |
+| Lookbook panel on the new data layer | not started | The auto-registered panel still renders from its own `ComponentReport`; it could render `Report::Finding`s and pick up suggestions for free. Icons findings could also flow through — the panel doesn't list icon findings today. |
+| Icons on the new data layer | not started | Icons stays outside `Report::Run` — its rake task calls `Icons.new(root:).run` directly. Migrating gets it into the TUI + HTML report for free but changes the rake shape; hold until there's demand. |
 | CI test workflow | not started | Specs only run inside the release workflow, on one Ruby. A PR-time matrix (3.4 + head) would catch floor regressions before tag time. |
 
 ---

@@ -85,5 +85,6 @@ examples/demo/
 | `audit` class-itis | small repo → no clusters at default thresholds (expected) |
 | `icons` sprite | generates `app/assets/images/icons/sprite.svg` |
 | `icons` inline SVGs | flags one inline `<svg><path/></svg>` in `welcome/broken.html.erb` |
-| `icons` dead icons | `search.svg` (no view references `#icon-search`) |
+| `icons` dead icons | `search.svg` (no view references `#icon-search`) — reporting only, doesn't fail the build |
+| `icons` emoji / glyph | flags `📄` (pictograph, tier `emoji`) and `✓` (dingbat, tier `glyph`) in `welcome/broken.html.erb` |
 | `tokens` drift | hex literals in `application.scss` matched/unmatched against defined tokens |

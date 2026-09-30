@@ -173,5 +173,25 @@ RSpec.describe Guardrails::Init::ConfigWriter do
       expect(content).to match(/0\s*=.*exact match/)
       expect(content).to match(/4\s*=.*default/)
     end
+
+    it "writes an icons.emoji config block with sensible defaults" do
+      described_class.new(root, output: StringIO.new).write(detection_result(strategy: :scss_variables))
+
+      icons = written_config["guardrails"]["icons"]
+      expect(icons["emoji"]["enabled"]).to be true
+      expect(icons["emoji"]["glyphs"]).to be true
+      expect(icons["emoji"]["allow_files"]).to eq([])
+      expect(icons["emoji"]["allow_chars"]).to eq([])
+    end
+
+    it "writes an emoji footer comment explaining the two tiers" do
+      described_class.new(root, output: StringIO.new).write(detection_result(strategy: :scss_variables))
+
+      content = root.join("guardrails.yml").read
+      # Tier definitions + inline-marker convention documented
+      expect(content).to include("icons.emoji tiers:")
+      expect(content).to include("Extended_Pictographic")
+      expect(content).to include("guardrails-ok: emoji")
+    end
   end
 end

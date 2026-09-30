@@ -88,12 +88,22 @@ RSpec.describe "examples/demo" do
       end
     end
 
-    it "generates a sprite, flags inline SVGs, and reports dead icons" do
+    it "generates a sprite, flags inline SVGs, reports dead icons, and catches seeded emoji/glyph icons" do
       result = Guardrails::Icons.new(root: root, output: StringIO.new).run
 
       expect(root.join("app/assets/images/icons/sprite.svg")).to exist
       expect(result[:inline_svgs].length).to be >= 1
       expect(result[:dead_icons]).to include("search")
+
+      # welcome/broken.html.erb seeds one pictograph (📄, :emoji tier) and
+      # one dingbat (✓, :glyph tier). Both flag. Confirms the demo
+      # exercises the 1.5.0 rule end-to-end.
+      expect(result[:emoji].length).to eq(2)
+      tiers = result[:emoji].map(&:tier).sort
+      expect(tiers).to eq([:emoji, :glyph])
+
+      # violations? now includes emoji — the rake task exits 1 here.
+      expect(result.violations?).to be true
     end
   end
 
