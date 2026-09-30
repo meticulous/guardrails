@@ -107,11 +107,24 @@ namespace :guardrails do
     exit 1 if runner.any_failing?(findings)
   end
 
-  desc "Generate SVG icon sprite and audit icon usage — exits 1 on inline SVGs, unknown icon refs, or emoji/glyph icons"
+  desc "Generate SVG icon sprite and audit icon usage (SUGGEST=1, FORMAT=json) — exits 1 on inline SVGs, unknown icon refs, or emoji/glyph icons"
   task :icons do
     require "guardrails/icons"
+    require "stringio"
     root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
-    result = Guardrails::Icons.new(root: root).run
+    suggest = %w[1 true yes].include?(ENV["SUGGEST"]&.downcase)
+    format = ENV["FORMAT"].to_s.downcase == "json" ? :json : :text
+
+    if format == :json
+      # Suppress human-readable output; only JSON goes to stdout.
+      require "json"
+      result = Guardrails::Icons.new(root: root, output: StringIO.new,
+                                     suggest: suggest, format: :json).run
+      $stdout.puts JSON.pretty_generate(result.to_h)
+    else
+      result = Guardrails::Icons.new(root: root, suggest: suggest).run
+    end
+
     exit 1 if result.violations?
   end
 

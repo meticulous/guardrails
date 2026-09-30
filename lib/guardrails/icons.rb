@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "set"
 require "yaml"
+require_relative "report/style"
+require_relative "icons/emoji_scan"
 
 module Guardrails
   class Icons
@@ -16,12 +19,67 @@ module Guardrails
     # Dead icons are excluded from `violations?` on purpose: deleting an
     # unused SVG file is a human decision (it may be genuinely used by a
     # deploy path the scan can't see), so the audit reports them but
-    # doesn't fail the build over them.
-    Result = Struct.new(:inline_svgs, :dead_icons, :unknown_refs, keyword_init: true) do
+    # doesn't fail the build over them. Emoji findings DO fail — the
+    # sprite is the design-system boundary that emoji bypass.
+    Result = Struct.new(:inline_svgs, :dead_icons, :unknown_refs, :emoji, keyword_init: true) do
       def violations?
-        !inline_svgs.empty? || !unknown_refs.empty?
+        !inline_svgs.empty? || !unknown_refs.empty? || !emoji.empty?
+      end
+
+      # Machine-readable serialization for FORMAT=json. Structs' default
+      # `to_h` recurses into member Structs but not their arrays of
+      # Structs; call `to_h` on each Violation manually.
+      def to_h
+        {
+          inline_svgs: inline_svgs.map(&:to_h),
+          dead_icons: dead_icons,
+          unknown_refs: unknown_refs,
+          emoji: emoji.map(&:to_h),
+          summary: {
+            inline_svgs: inline_svgs.length,
+            dead_icons: dead_icons.length,
+            unknown_refs: unknown_refs.length,
+            emoji: emoji.length
+          }
+        }
       end
     end
+
+    # Sprite-name hint map for SUGGEST=1 output. The pasted spec lists
+    # the well-known emoji → semantic-name mappings; only surface a
+    # suggestion when the target name actually exists in the consumer's
+    # collected icon set (via `collect_icon_names`). Otherwise print
+    # "no sprite equivalent — add one." so users know the gap.
+    #
+    # Codepoints as keys (single-cluster form after removing VS16) so
+    # the lookup survives whichever form the source used.
+    SPRITE_NAME_HINTS = {
+      "✓" => %w[check checkmark],           # ✓
+      "✔" => %w[check checkmark],           # ✔
+      "✕" => %w[x close],                   # ✕
+      "✖" => %w[x close],                   # ✖
+      "✗" => %w[x close],                   # ✗
+      "✘" => %w[x close],                   # ✘
+      "×" => %w[x close],                   # ×
+      "★" => %w[star favorite],             # ★
+      "☆" => %w[star favorite],             # ☆
+      "⚠" => %w[warning alert],             # ⚠
+      "\u{1F4C4}" => %w[file document],         # 📄
+      "\u{1F4CE}" => %w[attachment paperclip],  # 📎
+      "\u{1F511}" => %w[key],                   # 🔑
+      "\u{1F464}" => %w[user person avatar],    # 👤
+      "\u{1F3E2}" => %w[building office],       # 🏢
+      "\u{1F5D1}" => %w[trash delete],          # 🗑
+      "\u{270F}" => %w[edit pencil],            # ✏
+      "➕" => %w[plus add],                  # ➕
+      "➖" => %w[minus remove],              # ➖
+      "\u{1F514}" => %w[bell notification],     # 🔔
+      "\u{1F507}" => %w[mute bell-off],         # 🔇
+      "\u{1F4E6}" => %w[package zip archive],   # 📦
+      "\u{1F3AC}" => %w[video film],            # 🎬
+      "\u{1F3B5}" => %w[audio music note],      # 🎵
+      "\u{1F4CA}" => %w[chart bar-chart]        # 📊
+    }.freeze
 
     DEFAULT_SOURCE = "app/assets/images/icons"
     DEFAULT_SPRITE_OUTPUT = "app/assets/images/icons/sprite.svg"
@@ -66,26 +124,58 @@ module Guardrails
       "app/javascript/**/*.{js,ts,jsx,tsx}"
     ].freeze
 
-    def initialize(root:, output: $stdout, source: nil, sprite_output: nil)
+    def initialize(root:, output: $stdout, source: nil, sprite_output: nil,
+                   style: nil, suggest: false, format: :text)
       @root = Pathname(root)
       @output = output
-      config = load_config
+      @style = style || Report::Style.new(io: output)
+      @suggest = suggest
+      @format = format
+      @config = load_config
 
-      @source = resolve_path(source || config.dig("guardrails", "icons", "source") || DEFAULT_SOURCE)
-      @sprite_output = resolve_path(sprite_output || config.dig("guardrails", "icons", "sprite_output") || DEFAULT_SPRITE_OUTPUT)
+      @source = resolve_path(source || @config.dig("guardrails", "icons", "source") || DEFAULT_SOURCE)
+      @sprite_output = resolve_path(sprite_output || @config.dig("guardrails", "icons", "sprite_output") || DEFAULT_SPRITE_OUTPUT)
     end
 
     def run
       generate_sprite
-      violations = audit_inline_svgs
-      report_inline_svgs(violations)
+      inline_violations = audit_inline_svgs
       dead_report = report_dead_icons
-      print_dead_report(dead_report)
+      emoji_violations = audit_emoji
+
+      unless @format == :json
+        report_inline_svgs(inline_violations)
+        print_dead_report(dead_report)
+        report_emoji(emoji_violations)
+      end
+
       Result.new(
-        inline_svgs: violations,
+        inline_svgs: inline_violations,
         dead_icons: dead_report[:dead],
-        unknown_refs: dead_report[:unknown]
+        unknown_refs: dead_report[:unknown],
+        emoji: emoji_violations
       )
+    end
+
+    # Runs the emoji/glyph scan against the configured file set.
+    # Returns [] when the tier is disabled or the config block is
+    # missing entirely (opt-out escape hatch for teams that don't want
+    # this rule yet).
+    def audit_emoji
+      opts = emoji_config
+      enabled = opts.fetch("enabled", true)
+      return [] unless enabled
+
+      scanner = EmojiScan.new(
+        root: @root,
+        output: @output,
+        enabled: enabled,
+        glyphs: opts.fetch("glyphs", true),
+        scan_paths: opts["scan_paths"],
+        allow_files: opts["allow_files"],
+        allow_chars: opts["allow_chars"]
+      )
+      scanner.call
     end
 
     def audit_inline_svgs
@@ -124,6 +214,10 @@ module Guardrails
       return {} unless path.exist?
 
       YAML.safe_load_file(path) || {}
+    end
+
+    def emoji_config
+      @config.dig("guardrails", "icons", "emoji") || {}
     end
 
     def resolve_path(path)
@@ -248,6 +342,53 @@ module Guardrails
         @output.puts "  [#{v.type}] #{v.file}:#{v.line}"
         @output.puts "    #{v.snippet}"
       end
+    end
+
+    def report_emoji(violations)
+      return if violations.empty?
+
+      grouped = violations.group_by(&:file).sort_by { |file, _| file }
+      noun = violations.length == 1 ? "emoji icon" : "emoji icons"
+      @output.puts ""
+      @output.puts "Guardrails icons: #{violations.length} #{noun} used as UI iconography (the sprite is the design-system boundary; these bypass it)"
+      grouped.each do |file, list|
+        @output.puts "  #{file}"
+        list.each { |v| report_emoji_line(v) }
+      end
+    end
+
+    def report_emoji_line(violation)
+      # `snippet` here IS the grapheme cluster (`📄`), which stripping
+      # is safe on — chomp would only touch \n / \r / \r\n.
+      shown = violation.snippet.to_s.chomp
+      @output.puts "    #{violation.line}:#{violation.column}  #{shown}  (#{violation.codepoints}, #{violation.tier})"
+      hint = suggestion_for(violation)
+      @output.puts "      → #{hint}" if hint
+    end
+
+    # Sprite-name hint under SUGGEST=1, per the pasted spec. Only
+    # surface a suggestion when one of the mapped names actually exists
+    # in the consumer's icon set — otherwise the "add one" nudge is
+    # more useful than a name that doesn't resolve.
+    def suggestion_for(violation)
+      return nil unless @suggest
+
+      candidates = SPRITE_NAME_HINTS[canonical_key(violation.snippet)] || []
+      present = candidates & collect_icon_names
+      if present.any?
+        %(use <use href="#icon-#{present.first}"/>)
+      else
+        "no sprite equivalent — add one"
+      end
+    end
+
+    # Look up the hint using the grapheme's base character (dropping
+    # VS16 U+FE0F) so `📽️` and `📽` share a mapping. Multi-codepoint
+    # emoji (ZWJ families, flags, keycaps) rarely have single-icon
+    # sprite equivalents; those return nil and get the "add one" hint.
+    def canonical_key(grapheme)
+      stripped = grapheme.to_s.tr("\u{FE0F}", "")
+      stripped.length == 1 ? stripped : stripped
     end
   end
 end
