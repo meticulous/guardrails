@@ -93,7 +93,7 @@ APPLY=1 bundle exec rake guardrails:audit
 | `guardrails:init` | Stack detection, writes `guardrails.yml`, scaffolds prefers-color-scheme / prefers-contrast media queries. Refuses to overwrite an existing config — `FORCE=1` overrides. |
 | `guardrails:audit` | Runs every detector — view drift, stimulus, partial similarity, view-components, a11y, cross-codebase patterns, class-itis. Exits 1 on violations. |
 | `guardrails:tui` | The same audit, browsable: a severity roll-up you drill into (category → finding → source), regroup by file, filter, and jump from into your editor or the HTML report. See [Browsing findings](#browsing-findings). |
-| `guardrails:icons` | Generates an SVG sprite from `app/assets/images/icons/`, flags inline `<svg>` in views, reports unused icons. |
+| `guardrails:icons` | Generates an SVG sprite from `app/assets/images/icons/`, flags inline `<svg>` in views, catches emoji / glyph icons across views + helpers + models + JS + locales, reports unused sprite entries. **Exits 1** on any inline SVG, unknown sprite reference, or emoji/glyph icon (1.5.0). Dead icons stay reporting-only. `SUGGEST=1` prints sprite-name suggestions; `FORMAT=json` emits the machine-readable payload. |
 | `guardrails:tokens` | Parses your color and type-scale tokens (CSS vars / SCSS vars / Tailwind v3 config / Tailwind v4 `@theme`), reports hex literals in stylesheets that should reference a token. |
 | `guardrails:a11y:deep` | Reads axe-core JSON output and folds it into the unified report. Doesn't run axe itself (no Capybara / headless Chrome runtime deps) — point it at axe output your existing tooling produces. |
 | `guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
@@ -185,6 +185,48 @@ Or standalone via `rake guardrails:a11y:deep`. Stays parse-only — your existin
 ### Lookbook auto-panel (0.5.0)
 
 When [Lookbook](https://lookbook.build) is in the Gemfile, Guardrails auto-registers a `:guardrails` panel that appears next to every preview's Source / Notes panels. The panel renders `Guardrails::Lookbook::ComponentReport#for(component_class_name)` — drift in the template, orphan slots, similar templates — inline. Host apps override by dropping their own partial at `app/views/lookbook_panels/_guardrails.html.erb`. See [`doc/LOOKBOOK.md`](doc/LOOKBOOK.md).
+
+### Emoji and glyph icons (1.5.0)
+
+The `guardrails:icons` task now catches emoji and Unicode-dingbat glyphs used as UI iconography — the most common way AI-assisted code bypasses the sprite. Two tiers, both on by default:
+
+| Tier | What matches | Example |
+|---|---|---|
+| `emoji` | Extended_Pictographic pictographs + multi-codepoint sequences (VS16, ZWJ, flags, keycaps) | `📄` `👨‍👩‍👧` `🇺🇸` `1️⃣` |
+| `glyph` | Single codepoints in Arrows, Misc Technical, Geometric Shapes, Misc Symbols, Dingbats, Misc Symbols & Arrows | `✓` `→` `★` `●` `⚠` |
+
+Grapheme-cluster iteration counts VS16-styled pictographs / ZWJ families / flag pairs / keycaps as **one** violation with the full cluster in the snippet. `\p{Emoji}` is deliberately **not** used (it matches ASCII digits, `#`, and `*`). Explicitly excluded from both tiers: letters, digits, punctuation, currency signs, `©®™`, ellipsis, dashes, quotes — those are copy, not icons.
+
+**Scans**, by default: `app/views`, `app/components`, `app/helpers`, `app/models`, `app/presenters`, `app/javascript`, and `config/locales` — where the emoji-as-icon pattern usually lives (a helper returning `"📄"` per content type, a Stimulus controller setting `textContent = "✓"`). Comments are masked per file type: Prism-parsed for `.rb`, `<%# %>` for ERB, `//` and `/* */` for JS/SCSS/CSS, `#` for YAML. Line and column stay accurate.
+
+**Config** in `guardrails.yml` (defaults shown; `guardrails:init` writes this block for you):
+
+```yaml
+guardrails:
+  icons:
+    emoji:
+      enabled: true          # the emoji tier
+      glyphs: true           # the dingbat/glyph tier; false = emoji only
+      scan_paths:            # optional override of the default file list
+      allow_files:           # emoji-as-content: scanned but never flagged
+        - app/models/reaction.rb
+      allow_chars: []        # specific codepoints to never flag, e.g. ["→"]
+```
+
+**Inline escape** for a single line — the first inline-marker convention in the gem:
+
+```ruby
+BAD = "📄" # guardrails-ok: emoji intentional in this seed data
+
+# guardrails-ok: emoji shipping consciously — deprecation notice text
+LEGACY = "📎 old attachment"
+```
+
+Works on the same line or the preceding line, in Ruby `#` comments, ERB `<%# %>` blocks, JS `//`, SCSS `//`, and YAML `#`.
+
+**Suggestions** with `SUGGEST=1`: when the consumer's sprite contains a conventional name for the flagged emoji (`📄 → check for icon-file or icon-document`, `✓ → icon-check` / `icon-checkmark`), the task prints `→ use <use href="#icon-document"/>`. When no equivalent exists, it prints `→ no sprite equivalent — add one`. Only names the consumer's `collect_icon_names` includes are surfaced. No auto-fix path (`APPLY=1`) — the right sprite name depends on the consumer's semantics.
+
+**No-fix policy**: emoji contribute to `guardrails:icons` exit code (part of Result#violations?). Dead icons stay reporting-only — deleting a file is a human decision.
 
 ---
 

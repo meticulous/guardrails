@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-30
+
+Emoji and Unicode-dingbat detection for `guardrails:icons`, plus a
+behavior change: `guardrails:icons` now exits 1 on findings.
+
+### Added
+
+- **Emoji / glyph icon rule.** New `Guardrails::Icons::EmojiScan`
+  catches emoji pictographs and Unicode-dingbat glyphs used as UI
+  iconography — the most common way generated code bypasses the
+  sprite. Two tiers, both on by default:
+  - `emoji` — Extended_Pictographic pictographs plus multi-codepoint
+    sequences (VS16-styled `📽️`, ZWJ families `👨‍👩‍👧`, regional-indicator
+    flags `🇺🇸`, keycaps `1️⃣`). Grapheme-cluster iteration counts each
+    as one violation.
+  - `glyph` — single codepoints in Arrows / Misc Technical / Geometric
+    Shapes / Misc Symbols / Dingbats / Misc Symbols & Arrows
+    (`✓ → ★ ● ⚠`). Independently configurable via
+    `icons.emoji.glyphs: false` for teams that accept `→` in prose.
+- **Range-first single-codepoint classification.** Characters that
+  are BOTH Extended_Pictographic AND in a glyph codepoint range
+  (`⚠ ✏ ★ ⚡ ☃`) tag as `:glyph`, not `:emoji`. Matches the visual
+  grouping in the spec and keeps `glyphs: false` predictable — a team
+  that accepts `→` will also accept `★`.
+- **Comment masking per file type.** Prism-parsed for `.rb` (regex
+  `#.*$` would false-mask `"#icon-check"`), `<%# %>` only for ERB
+  (executable `<% %>` / `<%= %>` still scan — emoji in a `<%= "📄" %>`
+  literal is exactly the case the rule wants to catch), `//` and
+  `/* */` for JS/TS/SCSS/SASS/CSS, `#` for YAML. All length-preserving.
+- **Inline escape marker** — the first in the gem, will be the
+  pattern future detectors reuse:
+  ```
+  # guardrails-ok: emoji <reason>
+  ```
+  Suppresses the current line or the following line, in Ruby / ERB /
+  JS / SCSS / YAML comment syntax.
+- **`allow_files` and `allow_chars`** config knobs — first-class
+  escape hatches for legitimate emoji-as-content (chat reactions,
+  emoji picker constants) and specific codepoints (`allow_chars:
+  ["→"]`) without sprinkling markers on every line.
+- **`SUGGEST=1` sprite-name hints** for `guardrails:icons`. When the
+  consumer's sprite has a conventional name for the flagged emoji
+  (`📄 → icon-file`/`icon-document`, `✓ → icon-check`, `🗑 → icon-trash`
+  etc.), the task prints `→ use <use href="#icon-name"/>`. Only names
+  present in `collect_icon_names` are surfaced; otherwise prints
+  "no sprite equivalent — add one". No auto-fix path (`APPLY=1`) —
+  the right sprite name depends on consumer semantics.
+- **`FORMAT=json` for `guardrails:icons`** — matches the audit task's
+  shape. Includes `emoji` findings alongside `inline_svgs`,
+  `dead_icons`, `unknown_refs`, and a summary block.
+- **`Guardrails::Icons::Result`** struct with `violations?` predicate.
+  Mirrors `StimulusAudit::Result.violations?` /
+  `ViewComponentAudit::Result.violations?`. Preserves the Hash-style
+  `result[:inline_svgs]` access existing consumers rely on.
+- **`guardrails:init` writes an `icons.emoji` config block** with
+  sensible defaults and a footer comment explaining the tiers, the
+  allow_files/allow_chars distinction, and the inline-marker syntax.
+
+### Changed
+
+- **`guardrails:icons` is now blocking.** The task exits 1 on inline
+  SVGs, unknown sprite references, or any emoji/glyph icon finding.
+  Consumers who had inline SVGs passing silently will now fail CI —
+  that's the point. Dead icons remain reporting-only (deleting a
+  file is a human decision that can't be reduced to an exit code).
+
+### Unchanged
+
+- Existing icons task behavior for sprite generation, dead-icon
+  reporting, and inline-SVG detection is unchanged. `Result[:key]`
+  Hash-style access preserved for back-compat.
+
+[1.5.0]: https://github.com/meticulous/guardrails/releases/tag/v1.5.0
+
 ## [1.4.0] - 2026-09-19
 
 ### Added
