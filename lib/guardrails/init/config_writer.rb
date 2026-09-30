@@ -59,7 +59,13 @@ module Guardrails
             },
             "icons" => {
               "source" => "app/assets/images/icons",
-              "sprite_output" => "app/assets/images/icons/sprite.svg"
+              "sprite_output" => "app/assets/images/icons/sprite.svg",
+              "emoji" => {
+                "enabled" => true,
+                "glyphs" => true,
+                "allow_files" => [],
+                "allow_chars" => []
+              }
             },
             "tokens" => {
               "strategy" => result.strategy.to_s,
@@ -71,7 +77,7 @@ module Guardrails
           }
         }
 
-        header(result) + config.to_yaml(line_width: -1) + threshold_footer
+        header(result) + config.to_yaml(line_width: -1) + threshold_footer + icons_emoji_footer
       end
 
       def threshold_footer
@@ -83,6 +89,28 @@ module Guardrails
           #   4  = visually similar (default)
           #   10 = loose — same color family
           #   20+ = very loose, expect false matches
+        YAML
+      end
+
+      def icons_emoji_footer
+        <<~YAML
+
+          # icons.emoji tiers:
+          #   emoji   Extended_Pictographic pictographs plus multi-codepoint
+          #           sequences (flags, keycaps, ZWJ family, VS16-styled).
+          #           Colored on every modern OS — always drift.
+          #   glyphs  Monochrome symbols in the Arrows / Misc Technical /
+          #           Geometric Shapes / Misc Symbols / Dingbats / Misc
+          #           Symbols & Arrows ranges (→ ✓ ★ ● ⚠). Set glyphs: false
+          #           if your team accepts → in prose.
+          #
+          # allow_files skips a file entirely (chat reactions constants,
+          # emoji picker data). allow_chars keeps specific codepoints from
+          # flagging anywhere, e.g. ["→"].
+          #
+          # Inline escape for a single line: append `# guardrails-ok: emoji <reason>`
+          # (same line or preceding line, works in Ruby / ERB `<%# %>` / JS //
+          # / SCSS // / YAML #).
         YAML
       end
 
