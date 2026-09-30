@@ -15,10 +15,11 @@ RSpec.describe Guardrails::Tokens do
     full.write(content)
   end
 
-  def configure(colors_file: nil, type_scale_file: nil)
+  def configure(colors_file: nil, type_scale_file: nil, tailwind_config: nil)
     yaml = +"guardrails:\n  tokens:\n"
     yaml << "    colors_file: #{colors_file}\n" if colors_file
     yaml << "    type_scale_file: #{type_scale_file}\n" if type_scale_file
+    yaml << "    tailwind_config: #{tailwind_config}\n" if tailwind_config
     write_file "guardrails.yml", yaml
   end
 
@@ -134,6 +135,56 @@ RSpec.describe Guardrails::Tokens do
       tokens = parse
       tailwind = tokens.select { |t| t.syntax == :tailwind }
       expect(tailwind.map(&:name)).to contain_exactly("primary", "accent")
+    end
+
+    it "auto-discovers tokens from config/tailwind.config.js (tailwindcss-rails layout)" do
+      write_file "config/tailwind.config.js", <<~JS
+        module.exports = {
+          theme: {
+            extend: {
+              colors: { brand: { "dark-blue": "rgb(42, 51, 123)", pink: "#d4427c" } }
+            }
+          }
+        }
+      JS
+
+      tailwind = parse.select { |t| t.syntax == :tailwind }
+      expect(tailwind.map(&:name)).to contain_exactly("brand-dark-blue", "brand-pink")
+      expect(tailwind.map(&:file).uniq).to eq(["config/tailwind.config.js"])
+    end
+
+    it "prefers a root tailwind.config.js over config/tailwind.config.js" do
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { root_color: "#0066ff" } } }
+      JS
+      write_file "config/tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { nested_color: "#ffaa33" } } }
+      JS
+
+      expect(parse.map(&:name)).to eq(["root_color"])
+    end
+
+    it "uses tokens.tailwind_config from guardrails.yml over auto-discovery" do
+      configure(tailwind_config: "frontend/tailwind.config.cjs")
+      write_file "frontend/tailwind.config.cjs", <<~JS
+        module.exports = { theme: { colors: { explicit: "#0066ff" } } }
+      JS
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { root_color: "#ffaa33" } } }
+      JS
+
+      tokens = parse
+      expect(tokens.map(&:name)).to eq(["explicit"])
+      expect(tokens.first.file).to eq("frontend/tailwind.config.cjs")
+    end
+
+    it "returns no tailwind tokens when the configured tailwind_config is missing" do
+      configure(tailwind_config: "missing/tailwind.config.js")
+      write_file "tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { root_color: "#ffaa33" } } }
+      JS
+
+      expect(parse).to be_empty
     end
 
     it "combines tokens from colors_file and tailwind.config.js" do
@@ -275,6 +326,38 @@ RSpec.describe Guardrails::Tokens do
       described_class.new(root: root, output: output).run
 
       expect(output.string).to include("no colors_file, type_scale_file, or tailwind.config.js")
+    end
+
+    it "points at the searched locations when nothing is found" do
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("Looked for tailwind.config.js and config/tailwind.config.js")
+      expect(output.string).to include("tokens.tailwind_config")
+    end
+
+    it "names config/tailwind.config.js as a recognized source" do
+      write_file "config/tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("1 token found in config/tailwind.config.js")
+      expect(output.string).not_to include("no colors_file")
+    end
+
+    it "matches stylesheet drift against config/tailwind.config.js theme colors" do
+      write_file "config/tailwind.config.js", <<~JS
+        module.exports = { theme: { colors: { primary: "#0066ff" } } }
+      JS
+      write_file "app/assets/stylesheets/_button.css", ".btn { color: #0066ff; }"
+
+      output = StringIO.new
+      described_class.new(root: root, output: output).run
+
+      expect(output.string).to include("matches Tailwind theme color `primary`")
     end
 
     it "names tailwind.config.js as a recognized source when it's the only one" do

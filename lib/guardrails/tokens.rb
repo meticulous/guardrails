@@ -20,6 +20,15 @@ module Guardrails
       "app/assets/tailwind/**/*.css"
     ].freeze
 
+    # Where a Tailwind v3 config lives when `tokens.tailwind_config` isn't
+    # set. The repo root is the JS-first convention; `config/` is what
+    # `tailwindcss-rails` (the official Rails integration) generates for
+    # every Tailwind v3 app. First match wins.
+    TAILWIND_CONFIG_CANDIDATES = %w[
+      tailwind.config.js
+      config/tailwind.config.js
+    ].freeze
+
     # Same path-component skip-list as Audit / StackDetector — vendor
     # stylesheets nested under app/assets/stylesheets/ shouldn't surface
     # as drift since they're typically third-party.
@@ -59,8 +68,8 @@ module Guardrails
       # the config no longer matches the preset pattern.
       @tailwind_preset_hint = nil
 
-      file = @root.join("tailwind.config.js")
-      return [] unless file.exist?
+      file = tailwind_config_path
+      return [] unless file&.exist?
 
       content = File.read(file, encoding: Encoding::UTF_8)
       entries = TailwindConfigParser.parse(content)
@@ -72,7 +81,7 @@ module Guardrails
       # tailwind.config.js does `module.exports = { presets: [preset] }`.
       if entries.empty? && tailwind_uses_presets?(content)
         @tailwind_preset_hint =
-          "tailwind.config.js uses a `presets:` import; only the literal config file " \
+          "#{file.relative_path_from(@root)} uses a `presets:` import; only the literal config file " \
             "is parsed (we don't evaluate JS). Define non-color tokens in v4 `@theme` " \
             "blocks for cross-tool token visibility."
       end
@@ -91,11 +100,10 @@ module Guardrails
     def detect_drift(tokens)
       lookup = tokens.to_h { |t| [HexNormalizer.normalize(t.value), t] }
       drift = []
-      definition_files = [colors_file, type_scale_file].compact
+      definition_files = [colors_file, type_scale_file, tailwind_config_path].compact
 
       stylesheets.each do |file|
         next if definition_files.include?(file)
-        next if file == @root.join("tailwind.config.js")
 
         raw_content = File.read(file, encoding: Encoding::UTF_8)
         content = strip_comments(raw_content)
@@ -116,6 +124,19 @@ module Guardrails
         end
       end
       drift
+    end
+
+    # The Tailwind v3 config to parse, or nil when there isn't one.
+    # `tokens.tailwind_config` in guardrails.yml wins (needed for `.cjs` /
+    # `.ts` configs or monorepo layouts); otherwise the first existing
+    # candidate path is used.
+    def tailwind_config_path
+      configured = configured_token_file("tailwind_config")
+      return configured if configured
+
+      TAILWIND_CONFIG_CANDIDATES
+        .map { |relative| @root.join(relative) }
+        .find(&:exist?)
     end
 
     private
@@ -221,12 +242,13 @@ module Guardrails
         ["tokens.type_scale_file", type_scale_file]
       ].select { |_key, path| path }
 
-      tailwind_path = @root.join("tailwind.config.js")
-      tailwind_source = tailwind_path.exist? ? tailwind_path : nil
+      tailwind_path = tailwind_config_path
+      tailwind_source = tailwind_path&.exist? ? tailwind_path : nil
       all_sources = configured_entries.map { |_, p| p } + [tailwind_source].compact
 
       if all_sources.empty?
         @output.puts "Guardrails tokens: no colors_file, type_scale_file, or tailwind.config.js found"
+        @output.puts "  → Looked for #{TAILWIND_CONFIG_CANDIDATES.join(' and ')}; set tokens.tailwind_config in guardrails.yml for other locations."
         return
       end
 

@@ -3,6 +3,7 @@
 require "tmpdir"
 require "fileutils"
 require "stringio"
+require "yaml"
 require "guardrails/init"
 
 RSpec.describe Guardrails::Init do
@@ -27,6 +28,29 @@ RSpec.describe Guardrails::Init do
     described_class.new(root: root, output: StringIO.new).run
 
     expect(root.join("guardrails.yml")).to exist
+  end
+
+  it "records a config/tailwind.config.js in guardrails.yml and the summary" do
+    root.join("config").mkpath
+    root.join("config/tailwind.config.js").write("module.exports = { theme: { colors: { primary: '#0066ff' } } }\n")
+
+    output = StringIO.new
+    described_class.new(root: root, output: output).run
+
+    config = YAML.safe_load_file(root.join("guardrails.yml"))
+    expect(config["guardrails"]["tokens"]["tailwind_config"]).to eq("config/tailwind.config.js")
+    expect(output.string).to include("Tailwind config: config/tailwind.config.js")
+  end
+
+  it "does not record a root-level tailwind.config.js (found without configuration)" do
+    root.join("tailwind.config.js").write("module.exports = {}\n")
+
+    output = StringIO.new
+    described_class.new(root: root, output: output).run
+
+    config = YAML.safe_load_file(root.join("guardrails.yml"))
+    expect(config["guardrails"]["tokens"]).not_to have_key("tailwind_config")
+    expect(output.string).to include("Tailwind config: tailwind.config.js")
   end
 
   it "skips media-query scaffolding when guardrails.yml already exists" do

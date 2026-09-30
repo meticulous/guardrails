@@ -9,7 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [1.5.0] - 2026-09-30
 
 Emoji and Unicode-dingbat detection for `guardrails:icons`, plus a
-behavior change: `guardrails:icons` now exits 1 on findings.
+behavior change: `guardrails:icons` now exits 1 on findings. Also
+folds in Tailwind v3 config discovery under `config/` (contributed
+via PR #23).
 
 ### Added
 
@@ -71,6 +73,11 @@ behavior change: `guardrails:icons` now exits 1 on findings.
   Consumers who had inline SVGs passing silently will now fail CI —
   that's the point. Dead icons remain reporting-only (deleting a
   file is a human decision that can't be reduced to an exit code).
+
+### Fixed
+
+- **Tailwind v3 configs under `config/` are now found.** `tailwindcss-rails` generates `config/tailwind.config.js` for every Tailwind v3 app, but `Guardrails::Tokens` only ever looked at the repo root — so on the most common Rails layout the theme colors were silently skipped, `guardrails:tokens` reported every brand hex as "no matching token", and the `tailwind_arbitrary` auto-fix had nothing to match against. Discovery now checks `tailwind.config.js` then `config/tailwind.config.js`, first match wins. The "no sources found" message names both locations. (PR #23, LiamBateman)
+- **`tokens.tailwind_config` in `guardrails.yml`** — explicit path to the Tailwind v3 config, for `.cjs` / `.ts` files or monorepo layouts that neither candidate covers. Takes precedence over discovery. `guardrails:init` writes it when the config lives under `config/`, and prints the config it found in the detection summary. (PR #23, LiamBateman)
 
 ### Unchanged
 
