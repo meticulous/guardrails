@@ -23,16 +23,16 @@ Then open:
 From the demo root:
 
 ```bash
-bundle exec rake guardrails:audit          # full report
-bundle exec rake guardrails:icons          # icon sprite + dead-icon scan
-bundle exec rake guardrails:tokens         # token drift in stylesheets
-bundle exec rake guardrails:audit FORMAT=json   # machine-readable
-SUGGEST=1 bundle exec rake guardrails:audit     # write doc/guardrails-suggestions-{ts}.md
-APPLY=1   bundle exec rake guardrails:audit     # auto-fix raw_color + tailwind_arbitrary where a token matches
-AXE_JSON=axe.json bundle exec rake guardrails:audit  # fold deep a11y findings in
+bundle exec rake ui_guardrails:audit          # full report
+bundle exec rake ui_guardrails:icons          # icon sprite + dead-icon scan
+bundle exec rake ui_guardrails:tokens         # token drift in stylesheets
+bundle exec rake ui_guardrails:audit FORMAT=json   # machine-readable
+SUGGEST=1 bundle exec rake ui_guardrails:audit     # write doc/guardrails-suggestions-{ts}.md
+APPLY=1   bundle exec rake ui_guardrails:audit     # auto-fix raw_color + tailwind_arbitrary where a token matches
+AXE_JSON=axe.json bundle exec rake ui_guardrails:audit  # fold deep a11y findings in
 ```
 
-`guardrails:init` refuses to overwrite the existing `guardrails.yml` — by design. Use `FORCE=1 bundle exec rake guardrails:init` to re-scaffold.
+`ui_guardrails:init` refuses to overwrite the existing `guardrails.yml` — by design. Use `FORCE=1 bundle exec rake ui_guardrails:init` to re-scaffold.
 
 ## Layout
 

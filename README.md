@@ -39,8 +39,8 @@ end
 
 ```bash
 bundle install
-bundle exec rake guardrails:init       # writes guardrails.yml, scaffolds MQs
-bundle exec rake guardrails:audit      # run the full audit
+bundle exec rake ui_guardrails:init       # writes guardrails.yml, scaffolds MQs
+bundle exec rake ui_guardrails:audit      # run the full audit
 ```
 
 The gem's Railtie auto-loads rake tasks and (when [Lookbook](https://lookbook.build) is also in your Gemfile) registers the **Guardrails** panel inside every preview's inspector.
@@ -56,8 +56,8 @@ cd ~/code/guardrails && bundle install
 # From your Rails app's root:
 cd ~/code/my-rails-app
 bundle exec --gemfile=~/code/guardrails/Gemfile \
-  rake -f ~/code/guardrails/lib/tasks/guardrails.rake \
-  guardrails:audit
+  rake -f ~/code/guardrails/lib/tasks/ui_guardrails.rake \
+  ui_guardrails:audit
 ```
 
 Every rake task accepts the same env vars in sidecar mode as in-project. The tasks default `root` to `Rails.root` when Rails is loaded, else `Dir.pwd` — so just run from the target app's root.
@@ -71,17 +71,17 @@ Every rake task accepts the same env vars in sidecar mode as in-project. The tas
 # scaffolds prefers-color-scheme media queries if your stylesheet
 # doesn't already have them. Interactive when on a TTY; CI-safe
 # default fallback otherwise.
-bundle exec rake guardrails:init
+bundle exec rake ui_guardrails:init
 
 # Full audit — exits 1 on any violation.
-bundle exec rake guardrails:audit
+bundle exec rake ui_guardrails:audit
 
 # Get a markdown checklist of fixable findings:
-SUGGEST=1 bundle exec rake guardrails:audit
+SUGGEST=1 bundle exec rake ui_guardrails:audit
 # → writes doc/guardrails-suggestions-{TIMESTAMP}.md
 
 # Auto-fix raw_color and tailwind_arbitrary where a token matches:
-APPLY=1 bundle exec rake guardrails:audit
+APPLY=1 bundle exec rake ui_guardrails:audit
 ```
 
 ---
@@ -90,20 +90,22 @@ APPLY=1 bundle exec rake guardrails:audit
 
 | Task | What it does |
 |---|---|
-| `guardrails:init` | Stack detection, writes `guardrails.yml`, scaffolds prefers-color-scheme / prefers-contrast media queries. Refuses to overwrite an existing config — `FORCE=1` overrides. |
-| `guardrails:audit` | Runs every detector — view drift, stimulus, partial similarity, view-components, a11y, cross-codebase patterns, class-itis. Exits 1 on violations. |
-| `guardrails:tui` | The same audit, browsable: a severity roll-up you drill into (category → finding → source), regroup by file, filter, and jump from into your editor or the HTML report. See [Browsing findings](#browsing-findings). |
-| `guardrails:icons` | Generates an SVG sprite from `app/assets/images/icons/`, flags inline `<svg>` in views, catches emoji / glyph icons across views + helpers + models + JS + locales, reports unused sprite entries. **Exits 1** on any inline SVG, unknown sprite reference, or emoji/glyph icon (1.5.0). Dead icons stay reporting-only. `SUGGEST=1` prints sprite-name suggestions; `FORMAT=json` emits the machine-readable payload. |
-| `guardrails:tokens` | Parses your color and type-scale tokens (CSS vars / SCSS vars / Tailwind v3 config / Tailwind v4 `@theme`), reports hex literals in stylesheets that should reference a token. |
-| `guardrails:a11y:deep` | Reads axe-core JSON output and folds it into the unified report. Doesn't run axe itself (no Capybara / headless Chrome runtime deps) — point it at axe output your existing tooling produces. |
-| `guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
-| `guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
+| `ui_guardrails:init` | Stack detection, writes `guardrails.yml`, scaffolds prefers-color-scheme / prefers-contrast media queries. Refuses to overwrite an existing config — `FORCE=1` overrides. |
+| `ui_guardrails:audit` | Runs every detector — view drift, stimulus, partial similarity, view-components, a11y, cross-codebase patterns, class-itis. Exits 1 on violations. |
+| `ui_guardrails:tui` | The same audit, browsable: a severity roll-up you drill into (category → finding → source), regroup by file, filter, and jump from into your editor or the HTML report. See [Browsing findings](#browsing-findings). |
+| `ui_guardrails:icons` | Generates an SVG sprite from `app/assets/images/icons/`, flags inline `<svg>` in views, catches emoji / glyph icons across views + helpers + models + JS + locales, reports unused sprite entries. **Exits 1** on any inline SVG, unknown sprite reference, or emoji/glyph icon (1.5.0). Dead icons stay reporting-only. `SUGGEST=1` prints sprite-name suggestions; `FORMAT=json` emits the machine-readable payload. |
+| `ui_guardrails:tokens` | Parses your color and type-scale tokens (CSS vars / SCSS vars / Tailwind v3 config / Tailwind v4 `@theme`), reports hex literals in stylesheets that should reference a token. |
+| `ui_guardrails:a11y:deep` | Reads axe-core JSON output and folds it into the unified report. Doesn't run axe itself (no Capybara / headless Chrome runtime deps) — point it at axe output your existing tooling produces. |
+| `ui_guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
+| `ui_guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
+
+Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
 
 ---
 
 ## Detectors
 
-### View-level drift (`guardrails:audit`)
+### View-level drift (`ui_guardrails:audit`)
 
 Static AST walk over every `.html.erb` under `app/views/` and `app/components/` (via [Herb](https://github.com/marcoroth/herb), the ERB-aware parser):
 
@@ -117,8 +119,8 @@ Static AST walk over every `.html.erb` under `app/views/` and `app/components/` 
 
 ### Suggest mode and auto-fix
 
-- `SUGGEST=1 rake guardrails:audit` writes `doc/guardrails-suggestions-{TIMESTAMP}.md` — a markdown checklist with one `[ ]` per fixable finding, the rule that fired, and the proposed replacement (closest token by exact match, else near-match within a configurable channel-distance).
-- `APPLY=1 rake guardrails:audit` auto-fixes `raw_color` (→ `var(--token)`) and `tailwind_arbitrary` (→ Tailwind theme color shorthand) when a matching token exists. Near-match auto-fix is gated by `near_match_policy` in `guardrails.yml` (`fix` / `leave` / `notify`).
+- `SUGGEST=1 rake ui_guardrails:audit` writes `doc/guardrails-suggestions-{TIMESTAMP}.md` — a markdown checklist with one `[ ]` per fixable finding, the rule that fired, and the proposed replacement (closest token by exact match, else near-match within a configurable channel-distance).
+- `APPLY=1 rake ui_guardrails:audit` auto-fixes `raw_color` (→ `var(--token)`) and `tailwind_arbitrary` (→ Tailwind theme color shorthand) when a matching token exists. Near-match auto-fix is gated by `near_match_policy` in `guardrails.yml` (`fix` / `leave` / `notify`).
 
 ### Tokens
 
@@ -167,10 +169,10 @@ Then scans every other stylesheet for hex literals and reports drift, matching e
 bundle exec rspec spec/system/
 
 # Fold visual-diff findings into the audit:
-VISUAL_DIFF=1 bundle exec rake guardrails:audit
+VISUAL_DIFF=1 bundle exec rake ui_guardrails:audit
 ```
 
-Or standalone via `rake guardrails:visual:deep`. Parse-only — same trade as deep a11y, no Capybara/Chromium runtime deps in the gem. BackstopJS adapter tracked in [#15](https://github.com/meticulous/guardrails/issues/15). See [`doc/VISUAL-DIFF.md`](doc/VISUAL-DIFF.md).
+Or standalone via `rake ui_guardrails:visual:deep`. Parse-only — same trade as deep a11y, no Capybara/Chromium runtime deps in the gem. BackstopJS adapter tracked in [#15](https://github.com/meticulous/guardrails/issues/15). See [`doc/VISUAL-DIFF.md`](doc/VISUAL-DIFF.md).
 
 ### Deep a11y via axe-core JSON (0.6.0)
 
@@ -178,10 +180,10 @@ Or standalone via `rake guardrails:visual:deep`. Parse-only — same trade as de
 
 ```bash
 npx @axe-core/cli http://localhost:3000/ --save axe.json
-AXE_JSON=axe.json bundle exec rake guardrails:audit
+AXE_JSON=axe.json bundle exec rake ui_guardrails:audit
 ```
 
-Or standalone via `rake guardrails:a11y:deep`. Stays parse-only — your existing test toolchain runs axe (axe-core-rspec, the CLI, Puppeteer, a CDP script — anything that emits axe v4 JSON), Guardrails provides the merge + report. See [`doc/A11Y.md`](doc/A11Y.md).
+Or standalone via `rake ui_guardrails:a11y:deep`. Stays parse-only — your existing test toolchain runs axe (axe-core-rspec, the CLI, Puppeteer, a CDP script — anything that emits axe v4 JSON), Guardrails provides the merge + report. See [`doc/A11Y.md`](doc/A11Y.md).
 
 ### Lookbook auto-panel (0.5.0)
 
@@ -189,7 +191,7 @@ When [Lookbook](https://lookbook.build) is in the Gemfile, Guardrails auto-regis
 
 ### Emoji and glyph icons (1.5.0)
 
-The `guardrails:icons` task now catches emoji and Unicode-dingbat glyphs used as UI iconography — the most common way AI-assisted code bypasses the sprite. Two tiers, both on by default:
+The `ui_guardrails:icons` task now catches emoji and Unicode-dingbat glyphs used as UI iconography — the most common way AI-assisted code bypasses the sprite. Two tiers, both on by default:
 
 | Tier | What matches | Example |
 |---|---|---|
@@ -200,7 +202,7 @@ Grapheme-cluster iteration counts VS16-styled pictographs / ZWJ families / flag 
 
 **Scans**, by default: `app/views`, `app/components`, `app/helpers`, `app/models`, `app/presenters`, `app/javascript`, and `config/locales` — where the emoji-as-icon pattern usually lives (a helper returning `"📄"` per content type, a Stimulus controller setting `textContent = "✓"`). Comments are masked per file type: Prism-parsed for `.rb`, `<%# %>` for ERB, `//` and `/* */` for JS/SCSS/CSS, `#` for YAML. Line and column stay accurate.
 
-**Config** in `guardrails.yml` (defaults shown; `guardrails:init` writes this block for you):
+**Config** in `guardrails.yml` (defaults shown; `ui_guardrails:init` writes this block for you):
 
 ```yaml
 guardrails:
@@ -227,11 +229,11 @@ Works on the same line or the preceding line, in Ruby `#` comments, ERB `<%# %>`
 
 **Suggestions** with `SUGGEST=1`: when the consumer's sprite contains a conventional name for the flagged emoji (`📄 → check for icon-file or icon-document`, `✓ → icon-check` / `icon-checkmark`), the task prints `→ use <use href="#icon-document"/>`. When no equivalent exists, it prints `→ no sprite equivalent — add one`. Only names the consumer's `collect_icon_names` includes are surfaced. No auto-fix path (`APPLY=1`) — the right sprite name depends on the consumer's semantics.
 
-**No-fix policy**: emoji contribute to `guardrails:icons` exit code (part of Result#violations?). Dead icons stay reporting-only — deleting a file is a human decision.
+**No-fix policy**: emoji contribute to `ui_guardrails:icons` exit code (part of Result#violations?). Dead icons stay reporting-only — deleting a file is a human decision.
 
 ### Detectors from other gems
 
-Other gems add detectors to `guardrails:audit` with `Guardrails::Report::Detectors.register(name, klass)`. They run after the built-ins and show up in the text report, the summary, `FORMAT=json` (under `extensions.<name>`), `FORMAT=html` and the TUI. The class answers:
+Other gems add detectors to `ui_guardrails:audit` with `Guardrails::Report::Detectors.register(name, klass)`. They run after the built-ins and show up in the text report, the summary, `FORMAT=json` (under `extensions.<name>`), `FORMAT=html` and the TUI. The class answers:
 
 | Method | Does |
 | --- | --- |
@@ -253,7 +255,7 @@ Registration checks the class has all of these. Detectors only read what's alrea
 Every task prints a human-readable text report by default and exits 1 when violations or failing findings exist. For machine consumption:
 
 ```bash
-FORMAT=json bundle exec rake guardrails:audit > findings.json
+FORMAT=json bundle exec rake ui_guardrails:audit > findings.json
 ```
 
 The JSON payload has a `summary:` block with finding counts per category plus per-detector arrays — see `Guardrails::Report::Run#to_h` for the exact shape.
@@ -263,11 +265,11 @@ The JSON payload has a `summary:` block with finding counts per category plus pe
 On a real codebase the text report is long (one of our test apps produces 981 findings). Two ways to navigate it instead of scrolling it:
 
 ```bash
-bundle exec rake guardrails:tui                 # interactive, in the terminal
-FORMAT=html bundle exec rake guardrails:audit   # one self-contained HTML file
+bundle exec rake ui_guardrails:tui                 # interactive, in the terminal
+FORMAT=html bundle exec rake ui_guardrails:audit   # one self-contained HTML file
 ```
 
-**`guardrails:tui`** opens on the same severity roll-up the text report leads with. `⏎` drills in — category → findings → a single finding with its suggestion, every location, and the source around it. `tab` regroups the whole thing by file (the files with the most findings first), `/` filters across category, title, suggestion, and path, `o` opens the highlighted location in your editor at the right line, `w` writes and opens the HTML report, `r` re-runs the audit, `?` lists the rest. It takes the same env vars as `guardrails:audit` except `APPLY` and `SUGGEST` — browsing never rewrites files. No new dependencies: it's built on Ruby's bundled `io/console`.
+**`ui_guardrails:tui`** opens on the same severity roll-up the text report leads with. `⏎` drills in — category → findings → a single finding with its suggestion, every location, and the source around it. `tab` regroups the whole thing by file (the files with the most findings first), `/` filters across category, title, suggestion, and path, `o` opens the highlighted location in your editor at the right line, `w` writes and opens the HTML report, `r` re-runs the audit, `?` lists the rest. It takes the same env vars as `ui_guardrails:audit` except `APPLY` and `SUGGEST` — browsing never rewrites files. No new dependencies: it's built on Ruby's bundled `io/console`.
 
 The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-family, Zed, Sublime, TextMate, JetBrains, Helix, and vim/nvim/nano/emacs all open at the finding's line; anything else gets the file path. With no editor set, it falls back to `open` / `xdg-open`.
 
@@ -282,10 +284,10 @@ The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-fami
 | `SEVERITY=error` / `SEVERITY=warning` | Severity floor. `error` checks errors only; `warning` drops suggestions; default is everything. Applies to the report, the exit code, JSON, HTML, and the TUI alike. Detectors that can only produce muted findings aren't run. An unrecognized value aborts rather than being ignored. |
 | `FORMAT=json` | Emit one JSON document to stdout (all other audit output is suppressed). |
 | `FORMAT=html` / `OUTPUT=path` | Write the self-contained HTML report (default `tmp/guardrails/audit.html`). |
-| `GUARDRAILS_EDITOR=cmd` | Editor `guardrails:tui` opens locations in. Falls back to `$VISUAL`, then `$EDITOR`. |
+| `GUARDRAILS_EDITOR=cmd` | Editor `ui_guardrails:tui` opens locations in. Falls back to `$VISUAL`, then `$EDITOR`. |
 | `FORCE=1` | Bypass `init`'s refuse-to-overwrite default. |
 | `AXE_JSON=path` | Fold axe-core findings into the unified report. |
-| `VISUAL_DIFF=1` | Fold visual-diff findings into `guardrails:audit`. Embedded installs can flip this on permanently via `Guardrails.configure { \|c\| c.visual_diff.enabled = true }`. |
+| `VISUAL_DIFF=1` | Fold visual-diff findings into `ui_guardrails:audit`. Embedded installs can flip this on permanently via `Guardrails.configure { \|c\| c.visual_diff.enabled = true }`. |
 | `VISUAL_DIFF_DIR=path` / `VISUAL_DIFF_THRESHOLD=0.02` | Tune the visual-diff snap_diff adapter and mismatch threshold. |
 | `SIMILARITY_THRESHOLD=0.85` | Override the partial-similarity Jaccard threshold. |
 | `PATTERN_MIN_SIZE=8` / `PATTERN_MIN_OCCURRENCES=4` | Tune the cross-codebase pattern detector. |
@@ -296,9 +298,9 @@ The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-fami
 ## Coding agent hooks
 
 ```bash
-bundle exec rake guardrails:hooks:install                  # Claude Code
-AGENT=claude,codex bundle exec rake guardrails:hooks:install
-AGENT=all bundle exec rake guardrails:hooks:install        # Claude Code, Codex, Cursor, Gemini CLI
+bundle exec rake ui_guardrails:hooks:install                  # Claude Code
+AGENT=claude,codex bundle exec rake ui_guardrails:hooks:install
+AGENT=all bundle exec rake ui_guardrails:hooks:install        # Claude Code, Codex, Cursor, Gemini CLI
 ```
 
 This adds Guardrails to each agent's project hook config. It keeps whatever else is in that file and is safe to run again. Each hook calls `guardrails-hook <agent> <event>`, which runs only the parse-only checks: view drift (raw colours, Tailwind arbitrary values, inline styles, helper recommendations) and static a11y. A typical call takes a fraction of a second.
@@ -329,14 +331,14 @@ The audit task is a single shell command:
 ```yaml
 # .github/workflows/ci.yml
 - name: Guardrails audit
-  run: bundle exec rake guardrails:audit
+  run: bundle exec rake ui_guardrails:audit
 ```
 
 Adopting Guardrails on an existing codebase usually means a backlog of warnings you can't clear in one PR. Gate on errors now and ratchet down later:
 
 ```yaml
 - name: Guardrails audit (errors only)
-  run: bundle exec rake guardrails:audit SEVERITY=error
+  run: bundle exec rake ui_guardrails:audit SEVERITY=error
 ```
 
 `SEVERITY=error` exits 1 only when there are error-level findings (raw colors, arbitrary Tailwind values, a11y, visual diffs) and skips the warning- and suggestion-tier detectors entirely, so it's also the fastest way to run the audit. The report ends with a line saying what wasn't checked, so a green run can't be mistaken for a clean codebase.
@@ -345,7 +347,7 @@ For richer integration:
 
 ```yaml
 - name: Guardrails audit (JSON)
-  run: bundle exec rake guardrails:audit FORMAT=json > findings.json
+  run: bundle exec rake ui_guardrails:audit FORMAT=json > findings.json
   continue-on-error: true
 
 - name: Upload findings
@@ -359,7 +361,7 @@ For richer integration:
 
 ## Configuration
 
-`guardrails.yml` at the repo root. `guardrails:init` writes a sensible default after detecting your stack — what's below is annotated to show every available key:
+`guardrails.yml` at the repo root. `ui_guardrails:init` writes a sensible default after detecting your stack — what's below is annotated to show every available key:
 
 ```yaml
 guardrails:
@@ -391,7 +393,7 @@ guardrails:
 
 ## Demo app
 
-[`examples/demo`](examples/demo) is a bootable Rails 7.2 app with intentionally seeded findings — every detector trips at least once. Clone, `bin/setup`, `bin/rails server`, then visit `/`, `/broken`, and `/rails/lookbook` to see the auto-registered Guardrails panel. `bundle exec rake guardrails:audit` runs the full audit against the seeded tree. See [`examples/demo/README.md`](examples/demo/README.md).
+[`examples/demo`](examples/demo) is a bootable Rails 7.2 app with intentionally seeded findings — every detector trips at least once. Clone, `bin/setup`, `bin/rails server`, then visit `/`, `/broken`, and `/rails/lookbook` to see the auto-registered Guardrails panel. `bundle exec rake ui_guardrails:audit` runs the full audit against the seeded tree. See [`examples/demo/README.md`](examples/demo/README.md).
 
 ---
 

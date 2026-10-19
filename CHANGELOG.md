@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Rake tasks are `ui_guardrails:*`, after the gem's name.**
+  `rake ui_guardrails:audit`, `ui_guardrails:init`, `ui_guardrails:hooks:install`
+  and the rest. The `guardrails:*` names still work until 3.0: each runs
+  its `ui_guardrails:` task after a deprecation notice on stderr, so
+  `FORMAT=json` output is unaffected. They're left out of `rake -T`.
+  Sidecar installs load `lib/tasks/ui_guardrails.rake`; the 1.x command
+  with `lib/tasks/guardrails.rake` still works. The Ruby module
+  (`Guardrails`), `guardrails.yml` and `guardrails-hook` keep their names.
+
 ## [1.7.1] - 2026-10-13
 
 Agent hooks installed by 1.7.0 error after every edit on a branch

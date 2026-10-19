@@ -20,7 +20,7 @@ RSpec.describe "examples/demo" do
     expect(root).to exist
   end
 
-  describe "guardrails:audit (view violations)" do
+  describe "ui_guardrails:audit (view violations)" do
     it "reports the seeded view drift" do
       violations = Guardrails::Audit.new(root: root, output: StringIO.new).run
 
@@ -31,7 +31,7 @@ RSpec.describe "examples/demo" do
     end
   end
 
-  describe "guardrails:audit (stimulus)" do
+  describe "ui_guardrails:audit (stimulus)" do
     it "reports one orphan and one dead controller" do
       result = Guardrails::StimulusAudit.new(root: root, output: StringIO.new).run
 
@@ -40,7 +40,7 @@ RSpec.describe "examples/demo" do
     end
   end
 
-  describe "guardrails:audit (partial similarity)" do
+  describe "ui_guardrails:audit (partial similarity)" do
     it "flags the seeded similar pairs" do
       findings = Guardrails::PartialSimilarity.new(root: root, output: StringIO.new).run
 
@@ -52,7 +52,7 @@ RSpec.describe "examples/demo" do
     end
   end
 
-  describe "guardrails:audit (view components)" do
+  describe "ui_guardrails:audit (view components)" do
     it "flags missing previews and orphan slots" do
       result = Guardrails::ViewComponentAudit.new(root: root, output: StringIO.new).run
 
@@ -62,7 +62,7 @@ RSpec.describe "examples/demo" do
     end
   end
 
-  describe "guardrails:audit (static a11y)" do
+  describe "ui_guardrails:audit (static a11y)" do
     it "flags seeded a11y issues in welcome/broken.html.erb" do
       findings = Guardrails::A11yAudit.new(root: root, output: StringIO.new).run
 
@@ -73,7 +73,7 @@ RSpec.describe "examples/demo" do
     end
   end
 
-  describe "guardrails:icons" do
+  describe "ui_guardrails:icons" do
     around do |example|
       sprite = root.join("app/assets/images/icons/sprite.svg")
       sprite_existed = sprite.exist?
@@ -107,7 +107,7 @@ RSpec.describe "examples/demo" do
     end
   end
 
-  describe "guardrails:tokens" do
+  describe "ui_guardrails:tokens" do
     it "parses defined tokens and reports drift in stylesheets" do
       result = Guardrails::Tokens.new(root: root, output: StringIO.new).run
 

@@ -14,5 +14,5 @@ FileUtils.chdir APP_ROOT do
   system! "bundle install"
   puts "\n== Demo ready =="
   puts "Boot the server with:  bin/rails server"
-  puts "Run the audit with:    bundle exec rake guardrails:audit"
+  puts "Run the audit with:    bundle exec rake ui_guardrails:audit"
 end

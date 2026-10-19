@@ -19,7 +19,7 @@ module Guardrails
   # CDP-driven script) and pass the JSON output to Guardrails:
   #
   #     npx @axe-core/cli http://localhost:3000/ --save axe.json
-  #     AXE_JSON=axe.json bundle exec rake guardrails:audit
+  #     AXE_JSON=axe.json bundle exec rake ui_guardrails:audit
   #
   # The result is a single unified report — static findings from
   # A11yAudit plus runtime findings from axe — with the same exit-code

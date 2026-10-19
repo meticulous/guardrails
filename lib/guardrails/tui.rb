@@ -43,8 +43,8 @@ module Guardrails
 
     def start
       unless @input.respond_to?(:tty?) && @input.tty? && @output.tty?
-        raise NotInteractive, "guardrails:tui needs an interactive terminal. " \
-                              "Use guardrails:audit (or FORMAT=json / FORMAT=html) when piping or in CI."
+        raise NotInteractive, "ui_guardrails:tui needs an interactive terminal. " \
+                              "Use ui_guardrails:audit (or FORMAT=json / FORMAT=html) when piping or in CI."
       end
 
       @output.puts "Running Guardrails audit…"

@@ -4,7 +4,7 @@ require_relative "summary"
 
 module Guardrails
   module Report
-    # Detectors other gems add to `rake guardrails:audit`, run after the
+    # Detectors other gems add to `rake ui_guardrails:audit`, run after the
     # built-ins. ui_guardrails-browser registers its heuristic review
     # here.
     #

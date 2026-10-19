@@ -2,7 +2,7 @@
 
 module Guardrails
   class Init
-    # Minimal stdin/stdout prompter for guardrails:init. When the input
+    # Minimal stdin/stdout prompter for ui_guardrails:init. When the input
     # stream isn't a TTY (CI, piped invocations) every method short-circuits
     # to the configured default — no blocking reads, no surprises.
     class Prompter

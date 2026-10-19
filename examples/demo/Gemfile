@@ -13,7 +13,7 @@ gem "propshaft"
 gem "importmap-rails"
 
 # Components + previews. The demo's `app/components/` exists to be
-# audited by `guardrails:audit`; Lookbook auto-registers the
+# audited by `ui_guardrails:audit`; Lookbook auto-registers the
 # Guardrails panel via the gem's Railtie so the integration is
 # visible side-by-side with the static report.
 gem "view_component"

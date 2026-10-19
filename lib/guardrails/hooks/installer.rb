@@ -7,7 +7,7 @@ require_relative "config_file"
 
 module Guardrails
   module Hooks
-    # Writes each agent's hook config for `rake guardrails:hooks:install`,
+    # Writes each agent's hook config for `rake ui_guardrails:hooks:install`,
     # merged into what's there.
     class Installer
       Change = Struct.new(:agent, :path, :changed, keyword_init: true)

@@ -258,7 +258,7 @@ module Guardrails
           relative = path.relative_path_from(@root)
           @output.puts "Guardrails tokens: configured #{key} does not exist (#{relative})"
         end
-        @output.puts "  → Edit guardrails.yml to point at your real token file, or set FORCE=1 and re-run guardrails:init to regenerate config."
+        @output.puts "  → Edit guardrails.yml to point at your real token file, or set FORCE=1 and re-run ui_guardrails:init to regenerate config."
       end
 
       existing_sources = all_sources.select(&:exist?)

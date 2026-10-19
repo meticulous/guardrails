@@ -14,16 +14,16 @@ In a Rails app with `snap_diff-capybara` installed and system tests that call `s
 bundle exec rspec spec/system/
 
 # Then fold the visual-diff findings into the unified audit:
-VISUAL_DIFF=1 bundle exec rake guardrails:audit
+VISUAL_DIFF=1 bundle exec rake ui_guardrails:audit
 
 # Or run the visual check standalone:
-bundle exec rake guardrails:visual:deep
+bundle exec rake ui_guardrails:visual:deep
 ```
 
 If the diffs sit somewhere other than `doc/screenshots/`:
 
 ```bash
-VISUAL_DIFF_DIR=spec/screenshots bundle exec rake guardrails:visual:deep
+VISUAL_DIFF_DIR=spec/screenshots bundle exec rake ui_guardrails:visual:deep
 ```
 
 To tolerate small mismatches (when the adapter emits a numeric ratio — snap_diff currently emits only a binary pass/fail, see "Adapter limits" below):
@@ -31,7 +31,7 @@ To tolerate small mismatches (when the adapter emits a numeric ratio — snap_di
 ```bash
 # VISUAL_DIFF=1 still needs to be set — VISUAL_DIFF_THRESHOLD alone
 # doesn't enable the check, just tunes it.
-VISUAL_DIFF=1 VISUAL_DIFF_THRESHOLD=0.02 bundle exec rake guardrails:audit
+VISUAL_DIFF=1 VISUAL_DIFF_THRESHOLD=0.02 bundle exec rake ui_guardrails:audit
 ```
 
 ## Configuration
@@ -49,13 +49,13 @@ Guardrails.configure do |c|
 end
 ```
 
-With `enabled = true`, `rake guardrails:audit` always runs the visual-diff check; no need to set `VISUAL_DIFF=1` on each invocation.
+With `enabled = true`, `rake ui_guardrails:audit` always runs the visual-diff check; no need to set `VISUAL_DIFF=1` on each invocation.
 
 ### Sidecar (no Gemfile change) — environment variables
 
 | Var | Effect |
 |---|---|
-| `VISUAL_DIFF=1` | Enable visual-diff on `rake guardrails:audit` (the standalone `guardrails:visual:deep` task is always enabled). |
+| `VISUAL_DIFF=1` | Enable visual-diff on `rake ui_guardrails:audit` (the standalone `ui_guardrails:visual:deep` task is always enabled). |
 | `VISUAL_DIFF_DIR=path` | Override the snap_diff baseline directory (default `doc/screenshots`). |
 | `VISUAL_DIFF_THRESHOLD=0.02` | Per-finding mismatch ratio above which the audit fails. Currently only meaningful for adapters that emit numeric ratios — snap_diff is binary. |
 
@@ -99,7 +99,7 @@ Each finding carries:
 
 ## JSON output
 
-When `FORMAT=json` is set on `guardrails:audit`, visual-diff findings appear under `visual_diff:`:
+When `FORMAT=json` is set on `ui_guardrails:audit`, visual-diff findings appear under `visual_diff:`:
 
 ```json
 {
@@ -132,7 +132,7 @@ A complete CI loop, end-to-end:
   continue-on-error: true  # don't fail the job here — let Guardrails report
 
 - name: Guardrails audit
-  run: VISUAL_DIFF=1 bundle exec rake guardrails:audit FORMAT=json > findings.json
+  run: VISUAL_DIFF=1 bundle exec rake ui_guardrails:audit FORMAT=json > findings.json
 
 - name: Upload findings + diff images
   if: always()

@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Called by a coding agent's hooks: `guardrails-hook <agent> <event>`,
-# with the agent's hook input on stdin. `rake guardrails:hooks:install`
+# with the agent's hook input on stdin. `rake ui_guardrails:hooks:install`
 # writes the agent configuration that calls it.
 require "guardrails"
 require "guardrails/hooks/runner"

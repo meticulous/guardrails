@@ -13,7 +13,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 
 ## V0 — Foundation
 
-### Audit (`rails guardrails:audit`)
+### Audit (`rails ui_guardrails:audit`)
 
 | Item | Status | Notes |
 |---|---|---|
@@ -41,7 +41,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | `inline_style` auto-fix | ❌ deferred | Structural rewrite, not value swap |
 | `font-size` auto-fix | ❌ deferred | Same constraint as inline_style |
 
-### Icons (`rails guardrails:icons`)
+### Icons (`rails ui_guardrails:icons`)
 
 | Item | Status |
 |---|---|
@@ -49,7 +49,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | Inline `<svg>` detection in views | ✅ shipped |
 | Dead-icon report | ✅ shipped |
 
-### Init / analysis (`rails guardrails:init`)
+### Init / analysis (`rails ui_guardrails:init`)
 
 | Item | Status | Notes |
 |---|---|---|
@@ -60,7 +60,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | Refuse-overwrite by default | ✅ shipped | |
 | `FORCE=1` to overwrite + re-scaffold MQs | ✅ shipped | |
 
-### Tokens (`rails guardrails:tokens`)
+### Tokens (`rails ui_guardrails:tokens`)
 
 | Item | Status | Notes |
 |---|---|---|
@@ -99,7 +99,7 @@ This doc tracks shipped vs. planned scope and parks remaining unknowns. V0 + mos
 | Component-shape similarity | ✅ shipped | n-gram Jaccard, default threshold 0.7. PartialSimilarity scans both `_*.html.erb` partials and `*_component.html.erb` VC templates |
 | Lookbook integration | ✅ shipped (0.5.0) | `Guardrails::Lookbook::ComponentReport` data API + Railtie auto-registers the `:guardrails` panel when Lookbook is loaded; partial ships inside the gem. Host can override the partial via standard view-path precedence. |
 | ERB-partial structural similarity | ✅ shipped | Same PartialSimilarity engine |
-| A11y integration | ✅ shipped (0.6.0) | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. **Deep mode shipped via `Guardrails::A11yDeep`** — consumes axe-core JSON output (single or multi-page) and folds findings into the unified report. `AXE_JSON=path/to/axe.json bundle exec rake guardrails:audit` or `rake guardrails:a11y:deep`. Stayed parse-only (no Capybara / headless Chrome runtime deps) per the original size constraint. |
+| A11y integration | ✅ shipped (0.6.0) | Static checks shipped (image_alt, button_name, link_name, input_label). button_name and link_name skip when the element body wraps ERB output — those cases get a `helper_recommended` finding instead. **Deep mode shipped via `Guardrails::A11yDeep`** — consumes axe-core JSON output (single or multi-page) and folds findings into the unified report. `AXE_JSON=path/to/axe.json bundle exec rake ui_guardrails:audit` or `rake ui_guardrails:a11y:deep`. Stayed parse-only (no Capybara / headless Chrome runtime deps) per the original size constraint. |
 | `helper_recommended` detector | ✅ shipped | Flags `<button>` / `<a>` wrapping ERB output and suggests `tag.button` / `button_to` / `link_to`. Pairs with the a11y skip for the same case |
 | Targeted auto-fix | ✅ shipped | See V0 auto-fix table; tailwind_arbitrary now also auto-fixes when a `:tailwind` theme token matches |
 | Sample app in `examples/` | ✅ shipped (0.7.0) | Bootable Rails 7.2 app. `cd examples/demo && bundle install && bin/rails server` renders the seeded views and mounts Lookbook with the Guardrails panel auto-registered. Same tree the integration spec exercises. |
@@ -125,15 +125,15 @@ The planned roadmap ended at V2. Running the gem on real codebases (Patchvault: 
 | Inline suggestions + triage summary | ✅ shipped (1.1.0) | Every finding carries a `→` action; severity-grouped summary at top and bottom; `[error]` / `[warning]` / `[suggest]` tags; TTY-aware ASCII styling, `NO_COLOR` honored. |
 | Ruby 3.4 / railties 7.2 floor | ✅ shipped (1.2.0) | Compatibility-only release. Ruby 3.2/3.3 or Rails 7.1 users stay on 1.1.0. |
 | Findings data layer | ✅ shipped (1.3.0) | `Guardrails::Report::Run` runs the audit once for every front-end; `Report::Finding` / `Location` / `Category` are detector-agnostic finding data. Every detector implements `categories(result)`, sharing its title / suggestion strings with the text report. New detectors only need to implement that to show up in the TUI and HTML report. |
-| Interactive browser (`rake guardrails:tui`) | ✅ shipped (1.3.0) | Roll-up → category → finding → source, regroup by file, live filter, open in `$EDITOR` at the line, re-run. `io/console` only — no new dependencies. If the hand-rolled rendering stops being enough, swapping in a TUI library means replacing `TUI::Screen` + the loop in `tui.rb`; `TUI::State` (navigation) doesn't know about terminals. |
+| Interactive browser (`rake ui_guardrails:tui`) | ✅ shipped (1.3.0) | Roll-up → category → finding → source, regroup by file, live filter, open in `$EDITOR` at the line, re-run. `io/console` only — no new dependencies. If the hand-rolled rendering stops being enough, swapping in a TUI library means replacing `TUI::Screen` + the loop in `tui.rb`; `TUI::State` (navigation) doesn't know about terminals. |
 | HTML report (`FORMAT=html`) | ✅ shipped (1.3.0) | One self-contained file, no server or assets — opens from disk or as a CI artifact. Generated rather than served: a mounted engine was more surface than the problem needed, and the Lookbook panel already covers in-app. |
 | File-grouped view | ✅ shipped (1.3.0) | `tab` in the TUI. Was a 1.1.0 follow-up. |
 | `SEVERITY=error\|warning` floor | ✅ shipped (1.4.0) | One severity floor across text report, exit code, JSON, HTML, and TUI. Skips detectors that can only produce muted findings. Filtered reports say what wasn't checked; unknown values abort. Supersedes the `--strict` flag dropped in V0. |
-| Emoji + glyph icon detection | ✅ shipped (1.5.0) | `Guardrails::Icons::EmojiScan` catches emoji pictographs and Unicode-dingbat glyphs used as UI iconography — grapheme-cluster iteration (VS16 / ZWJ / flag / keycap count as one), range-first single-codepoint classification, per-file-type comment masking (Prism for Ruby, `<%# %>` for ERB, `//` `/* */` for JS/SCSS, `#` for YAML), `guardrails-ok: emoji` inline marker (first inline-escape convention in the gem), `allow_files` + `allow_chars` config, `SUGGEST=1` sprite-name hints. `guardrails:icons` also flipped to blocking — exit 1 on inline SVGs, unknown sprite refs, or emoji icons. |
+| Emoji + glyph icon detection | ✅ shipped (1.5.0) | `Guardrails::Icons::EmojiScan` catches emoji pictographs and Unicode-dingbat glyphs used as UI iconography — grapheme-cluster iteration (VS16 / ZWJ / flag / keycap count as one), range-first single-codepoint classification, per-file-type comment masking (Prism for Ruby, `<%# %>` for ERB, `//` `/* */` for JS/SCSS, `#` for YAML), `guardrails-ok: emoji` inline marker (first inline-escape convention in the gem), `allow_files` + `allow_chars` config, `SUGGEST=1` sprite-name hints. `ui_guardrails:icons` also flipped to blocking — exit 1 on inline SVGs, unknown sprite refs, or emoji icons. |
 | Lookbook panel on the new data layer | not started | The auto-registered panel still renders from its own `ComponentReport`; it could render `Report::Finding`s and pick up suggestions for free. Icons findings could also flow through — the panel doesn't list icon findings today. |
 | Icons on the new data layer | not started | Icons stays outside `Report::Run` — its rake task calls `Icons.new(root:).run` directly. Migrating gets it into the TUI + HTML report for free but changes the rake shape; hold until there's demand. |
 | Visual-diff adapter registry | ✅ shipped (1.6.0) | `Guardrails::VisualDiff.register_adapter` lets other gems add adapters; the name is checked when the adapter is built. `VisualDiff::Finding` gains `status`, `comment`, `regions`, `extra_details`. First consumer: ui_guardrails-browser's `:browser` adapter. |
-| Coding agent hooks | ✅ shipped (1.7.0) | `rake guardrails:hooks:install` wires Claude Code, Codex, Cursor and Gemini CLI to `guardrails-hook`: drift an agent introduces (compared with `HEAD`) goes back to it after each edit, and new errors send it back once when it tries to finish. Other gems contribute through `Guardrails::Hooks.register`; ui_guardrails-browser adds visual-review rejections. |
+| Coding agent hooks | ✅ shipped (1.7.0) | `rake ui_guardrails:hooks:install` wires Claude Code, Codex, Cursor and Gemini CLI to `guardrails-hook`: drift an agent introduces (compared with `HEAD`) goes back to it after each edit, and new errors send it back once when it tries to finish. Other gems contribute through `Guardrails::Hooks.register`; ui_guardrails-browser adds visual-review rejections. |
 | Detector registry | ✅ shipped (1.7.0) | `Guardrails::Report::Detectors.register(name, klass)` adds a detector to `Report::Run`, so it reaches the text report, summary, JSON (under `extensions`), HTML and TUI. Each decides when it's on (`enabled?(env:)`), how serious it can get (`max_severity`, so `SEVERITY=` skips it), and when it fails. First consumer: ui_guardrails-browser's heuristic review. |
 | CI test workflow | ✅ shipped | `.github/workflows/test.yml` runs `bundle exec rspec` (including the `examples/demo` integration spec) and `gem build` on every pull request and push to `main`, on Ruby 3.4 (the floor) and 4.0. Floor regressions and packaging mistakes surface on the PR instead of at tag time. |
 

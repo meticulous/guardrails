@@ -5,6 +5,8 @@ require "rails/railtie"
 module Guardrails
   class Railtie < Rails::Railtie
     rake_tasks do
+      load File.expand_path("../tasks/ui_guardrails.rake", __dir__)
+      # Deprecated `guardrails:*` aliases, until 3.0.
       load File.expand_path("../tasks/guardrails.rake", __dir__)
     end
 

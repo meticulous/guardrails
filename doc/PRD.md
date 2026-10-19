@@ -53,7 +53,7 @@ Rails developers without dedicated designers have no tooling to catch this befor
 
 ## Features
 
-### 1. Component Audit (`rails guardrails:audit`)
+### 1. Component Audit (`rails ui_guardrails:audit`)
 
 Scans views and partials for:
 - Near-duplicate partials (structural similarity, not just naming)
@@ -63,14 +63,14 @@ Scans views and partials for:
 
 Outputs: summary report to stdout + optional JSON/HTML report
 
-### 2. Icon Management (`rails guardrails:icons`)
+### 2. Icon Management (`rails ui_guardrails:icons`)
 
 - Scans configured SVG source directory
 - Generates optimized SVG sprite sheet
 - Audits for inline SVGs in views that should be sprite references
 - Reports icon usage frequency (find dead icons)
 
-### 3. Design Token Enforcement (`rails guardrails:tokens`)
+### 3. Design Token Enforcement (`rails ui_guardrails:tokens`)
 
 - Reads a `guardrails.yml` token definition (colors, type scale, spacing)
 - Scans CSS/SCSS/Tailwind config for values that don't match defined tokens
@@ -116,7 +116,7 @@ guardrails:
 
 ## Success Metrics
 
-- Developers can run `rails guardrails:audit` in < 30 seconds on a mid-sized app
+- Developers can run `rails ui_guardrails:audit` in < 30 seconds on a mid-sized app
 - Catches at least 80% of common UI drift patterns in a test app
 - Zero false positives on a clean, well-structured Rails app
 - Used by at least 3 Meticulous clients within 6 months of launch
@@ -139,7 +139,7 @@ guardrails:
 |-----------|--------|-------|
 | PRD + README stub | 2026-05-04 | ✅ Done |
 | Gem skeleton + Railtie | TBD | First Claude Code session |
-| `guardrails:audit` v0 | TBD | |
-| `guardrails:icons` v0 | TBD | |
-| `guardrails:tokens` v0 | TBD | |
+| `ui_guardrails:audit` v0 | TBD | |
+| `ui_guardrails:icons` v0 | TBD | |
+| `ui_guardrails:tokens` v0 | TBD | |
 | Public beta / RubyGems publish | TBD | Before next speaking slot |
