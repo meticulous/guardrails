@@ -156,6 +156,42 @@ namespace :ui_guardrails do
       puts "#{data["components"].length} components, #{data["tokens"].length} tokens" \
            "#{libraries.empty? ? "" : " (#{libraries.join(", ")})"}."
     end
+
+    desc "Write the manifest, then point coding agents at it: a managed block in CLAUDE.md and AGENTS.md, " \
+         "and .cursor/rules/ui-guardrails.mdc (TARGETS=claude,agents,cursor,gemini,copilot; CHECK=1; REMOVE=1)"
+    task :rules do
+      require "guardrails/feed_ramp"
+      root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+      manifest = Guardrails::FeedRamp::Manifest.new(root: root)
+      targets = ENV["TARGETS"].to_s.split(",").map(&:strip).reject(&:empty?)
+      describe = lambda do |change|
+        line = "#{change.status.to_s.capitalize}: #{change.path.relative_path_from(root)}"
+        change.reason ? "#{line} (#{change.reason})" : line
+      end
+
+      begin
+        rules = Guardrails::FeedRamp::AgentRules.for(manifest, targets: targets.empty? ? nil : targets)
+
+        if %w[1 true yes].include?(ENV["REMOVE"]&.downcase)
+          rules.remove.each { |change| puts describe.call(change) }
+          next
+        end
+
+        if %w[1 true yes].include?(ENV["CHECK"]&.downcase)
+          stale = rules.stale.map { |change| change.path.relative_path_from(root).to_s }
+          stale.unshift(manifest.path.relative_path_from(root).to_s) if manifest.stale?
+          abort "Feed Ramp files are out of date (#{stale.join(", ")}); run `rake ui_guardrails:feed_ramp:rules` and commit the result." if stale.any?
+          puts "Feed Ramp manifest and agent rules are up to date."
+          next
+        end
+
+        rules.stale # a target with broken markers stops the run before anything is written
+        manifest.write.each { |path, status| puts "#{status.to_s.capitalize}: #{path.relative_path_from(root)}" }
+        rules.write.each { |change| puts describe.call(change) }
+      rescue Guardrails::Error => e
+        abort e.message
+      end
+    end
   end
 
   namespace :hooks do

@@ -25,7 +25,8 @@ RSpec.describe "rake task names" do
     load_tasks("ui_guardrails.rake")
 
     expect(task_names).to include("ui_guardrails:audit", "ui_guardrails:init", "ui_guardrails:hooks:install",
-                                  "ui_guardrails:a11y:deep")
+                                  "ui_guardrails:a11y:deep", "ui_guardrails:feed_ramp:manifest",
+                                  "ui_guardrails:feed_ramp:rules")
     expect(task_names.grep(/\Aguardrails:/)).to be_empty
   end
 

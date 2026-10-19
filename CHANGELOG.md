@@ -19,6 +19,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   ViewComponent, Phlex or Lookbook needs to be installed. Output is
   deterministic; `CHECK=1` exits 1 when it's out of date. Configured
   under `feed_ramp:` in `guardrails.yml`.
+- **Feed Ramp agent rules.** `rake ui_guardrails:feed_ramp:rules` writes
+  the manifest, then a block telling coding agents to render the app's
+  components, listing them and the token categories, in `CLAUDE.md` and
+  `AGENTS.md`, plus `.cursor/rules/ui-guardrails.mdc`. `GEMINI.md` and
+  `.github/copilot-instructions.md` are opt-in (`TARGETS=` or
+  `feed_ramp.rules_targets`). Only the text between the
+  `ui_guardrails:feed_ramp` markers is ever rewritten; running it twice
+  changes nothing, broken markers stop the run before anything is
+  written, and `REMOVE=1` takes the blocks out again. `CHECK=1` exits 1
+  when the manifest or any rules file is out of date.
+- The `session_start` agent hook points new sessions at `COMPONENTS.md`
+  when the app has one.
 - `Tokens#strip_comments` is public.
 
 ### Changed

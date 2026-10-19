@@ -19,8 +19,8 @@ module Guardrails
     # always gives byte-identical files that are worth committing.
     class Manifest
       SCHEMA_VERSION = 1
-      FILENAME = "manifest.json"
-      MARKDOWN_FILENAME = "COMPONENTS.md"
+      FILENAME = Config::MANIFEST_FILENAME
+      MARKDOWN_FILENAME = Config::MARKDOWN_FILENAME
 
       attr_reader :root, :config
 
@@ -30,11 +30,11 @@ module Guardrails
       end
 
       def path
-        @root.join(@config.output_dir, FILENAME)
+        @config.manifest_path(@root)
       end
 
       def markdown_path
-        @root.join(@config.output_dir, MARKDOWN_FILENAME)
+        @config.markdown_path(@root)
       end
 
       def to_h

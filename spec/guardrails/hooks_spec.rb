@@ -122,6 +122,25 @@ RSpec.describe Guardrails::Hooks do
       described_class.unregister(:review)
     end
 
+    it "points a new session at the Feed Ramp component list when there is one" do
+      expect(described_class.check(event(:session_start)).notes).to eq([])
+
+      write(".ui_guardrails/COMPONENTS.md", "# Components\n")
+      write(".ui_guardrails/manifest.json", %({"components": [{"name": "ButtonComponent"}, {"name": "CardComponent"}]}))
+      expect(described_class.check(event(:session_start)).message)
+        .to eq("This app's 2 UI components and design tokens are listed in .ui_guardrails/COMPONENTS.md, " \
+               "each with its params and a real usage example. Render one of them instead of writing the markup by hand.")
+
+      write(".ui_guardrails/manifest.json", "not json")
+      expect(described_class.check(event(:session_start)).message).to start_with("This app's UI components and design tokens")
+    end
+
+    it "finds the component list in a configured output_dir" do
+      write("guardrails.yml", "guardrails:\n  feed_ramp:\n    output_dir: docs/ui\n")
+      write("docs/ui/COMPONENTS.md", "# Components\n")
+      expect(described_class.check(event(:session_start)).message).to include("listed in docs/ui/COMPONENTS.md")
+    end
+
     it "skips a contributor that raises and keeps everything else" do
       write("app/views/pages/a.html.erb", %(<img src="x.png">\n))
       broken = Object.new

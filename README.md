@@ -99,6 +99,7 @@ APPLY=1 bundle exec rake ui_guardrails:audit
 | `ui_guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
 | `ui_guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
 | `ui_guardrails:feed_ramp:manifest` | Writes `.ui_guardrails/manifest.json` and `COMPONENTS.md`: the app's components and tokens, for coding agents. `CHECK=1` exits 1 when they're out of date. See [Feed Ramp](#feed-ramp). |
+| `ui_guardrails:feed_ramp:rules` | Writes the manifest, then a block pointing coding agents at it in `CLAUDE.md` and `AGENTS.md`, plus `.cursor/rules/ui-guardrails.mdc`. `TARGETS=` picks files, `CHECK=1` exits 1 when anything is out of date, `REMOVE=1` takes the blocks out. See [Feed Ramp](#feed-ramp). |
 
 Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
 
@@ -301,8 +302,9 @@ The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-fami
 The audit catches drift after it's written. Feed Ramp gives coding agents the app's real component library first, so they render the components you have instead of reinventing them.
 
 ```bash
-bundle exec rake ui_guardrails:feed_ramp:manifest           # writes .ui_guardrails/manifest.json + COMPONENTS.md
-CHECK=1 bundle exec rake ui_guardrails:feed_ramp:manifest   # in CI: exit 1 if they're out of date
+bundle exec rake ui_guardrails:feed_ramp:rules           # manifest + agent rules (CLAUDE.md, AGENTS.md, Cursor)
+CHECK=1 bundle exec rake ui_guardrails:feed_ramp:rules   # in CI: exit 1 if any of them is out of date
+bundle exec rake ui_guardrails:feed_ramp:manifest        # just .ui_guardrails/manifest.json + COMPONENTS.md
 ```
 
 The manifest lists every ViewComponent and Phlex component: class, file, template, constructor params with their defaults, slots, the variants and states from its Lookbook / ViewComponent previews, its doc comment, and one usage example. It also lists the design tokens: everything `ui_guardrails:tokens` reads, plus custom properties in the `:root { }` and Tailwind v4 `@theme { }` blocks of your stylesheets.
@@ -311,6 +313,29 @@ The manifest lists every ViewComponent and Phlex component: class, file, templat
 - **Examples are copied, never written.** Each component's example is the shortest render of it in a visible preview, or else in a template or Ruby view, copied verbatim. A usage that names the component in full wins, since it works in any view. A component nothing renders gets no example.
 - **Deterministic.** Same source, byte-identical files: no timestamps, everything sorted. Commit both files so agents on a fresh clone have them and component API changes show up in review. `CHECK=1` rebuilds and compares, so it fails only when the committed files are actually wrong, not on every view edit.
 - **Phlex slots are a heuristic.** Phlex has no slot declarations, so public methods taking a block are listed instead and marked `heuristic`.
+
+### Agent rules
+
+`ui_guardrails:feed_ramp:rules` writes the manifest, then tells agents it exists, in the files they read at the start of every session:
+
+| Target | File | |
+| --- | --- | --- |
+| `claude` | `CLAUDE.md` | default |
+| `agents` | `AGENTS.md` (Codex, Cursor, and others) | default |
+| `cursor` | `.cursor/rules/ui-guardrails.mdc` | default; attached when the agent works in `app/views` or a component path |
+| `gemini` | `GEMINI.md` | opt in |
+| `copilot` | `.github/copilot-instructions.md` | opt in |
+
+Pick them with `TARGETS=claude,agents,copilot` or `rules_targets:` in `guardrails.yml`. The block names the components (up to 50) and token categories, and says to render an existing component before writing markup by hand.
+
+- **Your content is left alone.** The block sits between `<!-- ui_guardrails:feed_ramp:begin -->` and `<!-- ui_guardrails:feed_ramp:end -->`; only that part is ever rewritten. A file without the markers gets the block at the end, and a second run with the same manifest changes nothing. Move the block anywhere in the file and it stays there.
+- **Broken markers stop the run.** With an unpaired, duplicated or reversed marker, nothing is written and the error names the file.
+- **One copy per file.** When `CLAUDE.md` imports `@AGENTS.md`, or is a link to it, the block only goes in `AGENTS.md`.
+- **`REMOVE=1`** takes the blocks out and deletes the files that held nothing else.
+
+The Cursor rule file is Feed Ramp's own and is rewritten whole. If a file at that path wasn't written by Feed Ramp, it's left alone and the run fails.
+
+When [agent hooks](#coding-agent-hooks) are installed, each new session also gets a one-line pointer to `COMPONENTS.md`.
 
 Config in `guardrails.yml` (all optional; defaults shown):
 
@@ -321,6 +346,7 @@ guardrails:
     preview_paths: [test/components/previews, spec/components/previews, lookbook/previews]
     token_files: []          # extra files whose custom properties are all tokens
     output_dir: .ui_guardrails
+    rules_targets: [claude, agents, cursor]   # also: gemini, copilot
 ```
 
 Lookbook's `preview_paths` live in Rails config, which Feed Ramp doesn't boot the app to read; add yours here if they aren't the defaults.
@@ -343,7 +369,7 @@ It reports only what the agent introduced. A template is compared with its versi
 | --- | --- |
 | After the agent edits a template | The drift it just introduced goes back to it as context. Nothing is blocked. |
 | When it tries to finish | New **errors** in any template changed since `HEAD` send it back to work, once per turn. Warnings alone don't. |
-| When a session starts | Notes from other gems (ui_guardrails-browser adds open visual-review rejections). |
+| When a session starts | Where the [Feed Ramp](#feed-ramp) component list is, when the app has one, and notes from other gems (ui_guardrails-browser adds open visual-review rejections). |
 
 | Agent | Config | Notes |
 | --- | --- | --- |
