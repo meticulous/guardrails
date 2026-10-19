@@ -4,7 +4,7 @@ A Rails toolset that prevents UI drift in AI-assisted applications. Static audit
 
 Built and maintained by [Meticulous](https://meticulous.com).
 
-**Current release:** 1.4.0 — V0 + V1 + V2 complete, published on [RubyGems.org as `ui_guardrails`](https://rubygems.org/gems/ui_guardrails). The Ruby module stays `Guardrails` (so `require "guardrails"` is unchanged) — only the gem package name on rubygems carries the `ui_` prefix, to clear RubyGems' similarity rule against the unrelated [`guard-rails`](https://rubygems.org/gems/guard-rails) gem. See [`doc/ROADMAP.md`](doc/ROADMAP.md) for status, [`CHANGELOG.md`](CHANGELOG.md) for the full naming rationale.
+**Current release:** 2.0.0, which adds [Feed Ramp](#feed-ramp): your component library handed to coding agents before they write markup, not just drift caught after. Published on [RubyGems.org as `ui_guardrails`](https://rubygems.org/gems/ui_guardrails). The Ruby module stays `Guardrails` (so `require "guardrails"` is unchanged) — only the gem package name on rubygems carries the `ui_` prefix, to clear RubyGems' similarity rule against the unrelated [`guard-rails`](https://rubygems.org/gems/guard-rails) gem. See [`doc/ROADMAP.md`](doc/ROADMAP.md) for status, [`CHANGELOG.md`](CHANGELOG.md) for the full naming rationale.
 
 ---
 
@@ -65,6 +65,37 @@ Every rake task accepts the same env vars in sidecar mode as in-project. The tas
 ---
 
 ## Quick start
+
+### Feed Ramp in 60 seconds
+
+Give your coding agents the components you already have:
+
+```bash
+bundle add ui_guardrails --group development
+
+# 1. Component manifest + agent rules: writes .ui_guardrails/manifest.json and
+#    COMPONENTS.md, and a managed block in CLAUDE.md and AGENTS.md plus a Cursor rule
+bundle exec rake ui_guardrails:feed_ramp:rules
+
+# 2. Optional: the MCP server (search_components, get_component, check_snippet)
+bundle exec rake ui_guardrails:feed_ramp:mcp:install        # AGENT=all adds Cursor and Gemini CLI
+
+# 3. Commit it, so every clone and every agent session has it
+git add .ui_guardrails CLAUDE.md AGENTS.md .cursor/rules .mcp.json
+
+# 4. In CI: fail when the manifest or rules are out of date, and on drift,
+#    including hand-written markup that copies a component (component_match)
+CHECK=1 bundle exec rake ui_guardrails:feed_ramp:rules
+bundle exec rake ui_guardrails:audit
+
+# 5. Measure it: score now, again after an agent session, and compare
+bundle exec rake ui_guardrails:feed_ramp:score
+bundle exec rake ui_guardrails:feed_ramp:score BASELINE=last
+```
+
+Nothing boots your app, and ViewComponent, Phlex and Lookbook are all optional. `component_match` is a warning, so it fails the audit; set `feed_ramp.component_match: suggestion` in `guardrails.yml` to see what it catches before it gates builds. Details are in [Feed Ramp](#feed-ramp).
+
+### The audit
 
 ```bash
 # One-time setup — detects your token stack, writes guardrails.yml,

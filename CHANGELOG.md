@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-19
+
+**Feed Ramp.** The audit catches drift after an agent has written it;
+Feed Ramp gives coding agents the app's real component library before
+they write anything. A component manifest (`.ui_guardrails/manifest.json`
+and `COMPONENTS.md`), agent rules in `CLAUDE.md`, `AGENTS.md` and
+Cursor, an MCP server with `check_snippet`, a `component_match` audit
+rule for markup that copies a component, and a drift score for
+before/after comparisons. All of it is static: no app boot, network or
+model call. Rake tasks move to `ui_guardrails:*`, after the gem.
+
+### Upgrading from 1.x
+
+Nothing fails differently until you opt in, but check these:
+
+1. **Rake task names.** `guardrails:audit` is now `ui_guardrails:audit`,
+   and so on for every task. The old names still run, after a
+   deprecation notice on stderr, until 3.0; update CI configs, `bin/`
+   scripts and docs when convenient. Sidecar installs load
+   `lib/tasks/ui_guardrails.rake` (the 1.x `-f lib/tasks/guardrails.rake`
+   command still works). The `Guardrails` module, `guardrails.yml` and
+   `guardrails-hook` keep their names, and agent hooks installed by
+   1.7 keep working without a reinstall.
+2. **`component_match` warnings can fail `ui_guardrails:audit`, once you
+   commit a manifest.** Without `.ui_guardrails/manifest.json` the rule
+   is silent. With one, markup copying a component is a warning, and
+   warnings fail the audit. To see what it catches without failing
+   builds, start at suggestion and raise it later:
+
+   ```yaml
+   guardrails:
+     feed_ramp:
+       component_match: suggestion   # warning (default), error, off
+   ```
+
+3. **Agent hooks report `component_match`.** After an edit, markup
+   copying a component reaches the agent as a `[warning]`, with the
+   component's usage example as the fix. The stop hook still blocks on
+   errors only, so a warning doesn't keep an agent working. New
+   sessions are pointed at `COMPONENTS.md` when it exists.
+4. **`FORMAT=json` consumers.** The JSON shape is unchanged, but
+   `violations` can now carry `"type": "component_match"` (with the
+   component's name as `value`), and `summary.violations` counts them.
+   Code that switches on `type` should expect it.
+5. **Class-itis counts can shift slightly.** A class token touching ERB
+   (`btn--<%= variant %>`) no longer counts as a static class, so a few
+   clusters may split or merge.
+6. **`Report::Run#failing?`** ignores violations whose severity is
+   suggestion. Only `component_match` can be lowered that far today,
+   so nothing else changes.
+
+To start using Feed Ramp, see "Feed Ramp in 60 seconds" in the README.
+
 ### Added
 
 - **Feed Ramp component manifest.** `rake ui_guardrails:feed_ramp:manifest`

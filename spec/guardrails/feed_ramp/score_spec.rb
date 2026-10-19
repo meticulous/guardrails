@@ -164,9 +164,9 @@ RSpec.describe Guardrails::FeedRamp::Score do
     end
 
     it "notes a changed guardrails.yml or gem version" do
-      changed = baseline.merge("config_digest" => "abc", "generator" => "ui_guardrails 2.0.0")
+      changed = baseline.merge("config_digest" => "abc", "generator" => "ui_guardrails 0.9.0")
       expect(described_class.compare(current, changed)["notes"])
-        .to eq(["guardrails.yml changed", "scored by ui_guardrails 2.0.0, now ui_guardrails #{Guardrails::VERSION}"])
+        .to eq(["guardrails.yml changed", "scored by ui_guardrails 0.9.0, now ui_guardrails #{Guardrails::VERSION}"])
     end
 
     it "prints the headline, the buckets and how they moved" do

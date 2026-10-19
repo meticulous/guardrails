@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generator": "ui_guardrails 1.7.1",
+  "generator": "ui_guardrails 2.0.0",
   "libraries": {
     "lookbook": null,
     "phlex": null,

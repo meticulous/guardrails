@@ -1,7 +1,7 @@
 # Guardrails — Roadmap
 
-**Status:** **1.5.0 released on RubyGems.org** — V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases have been about reading the findings rather than producing more of them: inline suggestions (1.1.0), then an interactive browser + HTML report (1.3.0), then a severity floor for CI adoption on existing codebases (1.4.0). 1.5.0 returns to producing findings — emoji-as-icon detection, the one drift vector that had zero coverage.
-**Last updated:** 2026-09-19
+**Status:** **2.0.0: Feed Ramp.** V0 ✅, V1 ✅, V2 ✅ (the originally-planned roadmap, published as 1.0.0). Post-1.0 releases were about reading findings (1.1–1.4), then new findings and agent hooks (1.5–1.7). 2.0 moves upstream of the audit: it hands coding agents the app's component library before they write markup (manifest, agent rules, MCP server), flags markup that copies a component, and scores drift for before/after comparisons.
+**Last updated:** 2026-10-19
 
 ## Context
 
@@ -136,6 +136,23 @@ The planned roadmap ended at V2. Running the gem on real codebases (Patchvault: 
 | Coding agent hooks | ✅ shipped (1.7.0) | `rake ui_guardrails:hooks:install` wires Claude Code, Codex, Cursor and Gemini CLI to `guardrails-hook`: drift an agent introduces (compared with `HEAD`) goes back to it after each edit, and new errors send it back once when it tries to finish. Other gems contribute through `Guardrails::Hooks.register`; ui_guardrails-browser adds visual-review rejections. |
 | Detector registry | ✅ shipped (1.7.0) | `Guardrails::Report::Detectors.register(name, klass)` adds a detector to `Report::Run`, so it reaches the text report, summary, JSON (under `extensions`), HTML and TUI. Each decides when it's on (`enabled?(env:)`), how serious it can get (`max_severity`, so `SEVERITY=` skips it), and when it fails. First consumer: ui_guardrails-browser's heuristic review. |
 | CI test workflow | ✅ shipped | `.github/workflows/test.yml` runs `bundle exec rspec` (including the `examples/demo` integration spec) and `gem build` on every pull request and push to `main`, on Ruby 3.4 (the floor) and 4.0. Floor regressions and packaging mistakes surface on the PR instead of at tag time. |
+
+---
+
+## 2.0 — Feed Ramp
+
+The audit and the hooks catch drift after an agent has written it. Feed Ramp gives the agent the component library first, so there's less to catch.
+
+| Item | Status | Notes |
+|---|---|---|
+| Component manifest | ✅ shipped (2.0.0) | `ui_guardrails:feed_ramp:manifest` writes `.ui_guardrails/manifest.json` + `COMPONENTS.md` from ViewComponent and Phlex components, Lookbook / ViewComponent previews, call sites and tokens. Prism-parsed, deterministic, examples copied verbatim, never invented. `CHECK=1` compares content, so view edits don't make it stale. |
+| Agent rules | ✅ shipped (2.0.0) | Marker-delimited block in `CLAUDE.md` / `AGENTS.md` (+ opt-in `GEMINI.md`, Copilot), owned `.cursor/rules/ui-guardrails.mdc`. Idempotent; broken markers stop the run; `REMOVE=1`. |
+| Drift score | ✅ shipped (2.0.0) | `ui_guardrails:feed_ramp:score`: issues per 100 templates in three buckets, saved runs, `BASELINE=` deltas. Never fails. |
+| `component_match` | ✅ shipped (2.0.0) | Audit rule, silent without a manifest. Matches a component's root tag plus its signature class or ≥80% of a 3+ class list. Warning by default, configurable down to suggestion. |
+| MCP server | ✅ shipped (2.0.0) | `ui_guardrails-mcp`: `list_components`, `get_component`, `search_components`, `check_snippet` (drift + component API checks). Hand-rolled JSON-RPC over stdio, no new dependency. |
+| Phlex kit calls as examples | not started | `Button(...)` / `render Components::Button.new` inside Phlex views aren't picked up as usage examples yet; only `Component.new` calls are. |
+| Lookbook `preview_paths` from Rails config | not started | Read without booting the app, or document a one-liner that writes them into `guardrails.yml`. |
+| `component_match` for `call`-only components with dynamic roots | not started | A component whose root classes are all dynamic has no fingerprint; a usage-derived fingerprint (what its renders produce in previews) would cover it, but needs rendering. |
 
 ---
 
