@@ -33,7 +33,7 @@ Guardrails works two ways: **installed in your project** (auto-loaded via a Rail
 ```ruby
 # Gemfile
 group :development, :test do
-  gem "ui_guardrails", "~> 1.0"
+  gem "ui_guardrails", "~> 2.0"
 end
 ```
 
@@ -71,7 +71,7 @@ Every rake task accepts the same env vars in sidecar mode as in-project. The tas
 Give your coding agents the components you already have:
 
 ```bash
-bundle add ui_guardrails --group development
+bundle add ui_guardrails --group "development, test"
 
 # 1. Component manifest + agent rules: writes .ui_guardrails/manifest.json and
 #    COMPONENTS.md, and a managed block in CLAUDE.md and AGENTS.md plus a Cursor rule
@@ -81,7 +81,8 @@ bundle exec rake ui_guardrails:feed_ramp:rules
 bundle exec rake ui_guardrails:feed_ramp:mcp:install        # AGENT=all adds Cursor and Gemini CLI
 
 # 3. Commit it, so every clone and every agent session has it
-git add .ui_guardrails CLAUDE.md AGENTS.md .cursor/rules .mcp.json
+#    (and .mcp.json if you ran step 2)
+git add .ui_guardrails CLAUDE.md AGENTS.md .cursor/rules
 
 # 4. In CI: fail when the manifest or rules are out of date, and on drift,
 #    including hand-written markup that copies a component (component_match)

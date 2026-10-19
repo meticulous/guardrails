@@ -35,6 +35,10 @@ git pull --ff-only
 grep VERSION lib/guardrails/version.rb
 head -20 CHANGELOG.md
 
+# A version bump changes the generator line in the demo's committed
+# Feed Ramp manifest; regenerate it (the demo spec fails until you do)
+(cd examples/demo && bundle exec rake ui_guardrails:feed_ramp:manifest)
+
 # Tag the merge commit and push the tag (replace X.Y.Z with the
 # version you're cutting — the next-release example would be the
 # version in lib/guardrails/version.rb on main right now).
