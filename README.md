@@ -99,6 +99,7 @@ APPLY=1 bundle exec rake ui_guardrails:audit
 | `ui_guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
 | `ui_guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
 | `ui_guardrails:feed_ramp:manifest` | Writes `.ui_guardrails/manifest.json` and `COMPONENTS.md`: the app's components and tokens, for coding agents. `CHECK=1` exits 1 when they're out of date. See [Feed Ramp](#feed-ramp). |
+| `ui_guardrails:feed_ramp:score` | Scores UI drift per 100 templates (hardcoded values, reinvented components, a11y) and saves it under `.ui_guardrails/scores/`. `BASELINE=last` or a path compares two runs; `FORMAT=json`. Never fails. See [Drift score](#drift-score). |
 | `ui_guardrails:feed_ramp:rules` | Writes the manifest, then a block pointing coding agents at it in `CLAUDE.md` and `AGENTS.md`, plus `.cursor/rules/ui-guardrails.mdc`. `TARGETS=` picks files, `CHECK=1` exits 1 when anything is out of date, `REMOVE=1` takes the blocks out. See [Feed Ramp](#feed-ramp). |
 
 Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
@@ -328,7 +329,7 @@ The manifest lists every ViewComponent and Phlex component: class, file, templat
 
 Pick them with `TARGETS=claude,agents,copilot` or `rules_targets:` in `guardrails.yml`. The block names the components (up to 50) and token categories, and says to render an existing component before writing markup by hand.
 
-- **Your content is left alone.** The block sits between `<!-- ui_guardrails:feed_ramp:begin -->` and `<!-- ui_guardrails:feed_ramp:end -->`; only that part is ever rewritten. A file without the markers gets the block at the end, and a second run with the same manifest changes nothing. Move the block anywhere in the file and it stays there.
+- **Everything outside the markers is kept.** The block sits between `<!-- ui_guardrails:feed_ramp:begin -->` and `<!-- ui_guardrails:feed_ramp:end -->`; only that part is ever rewritten. A file without the markers gets the block at the end, and a second run with the same manifest changes nothing. Move the block anywhere in the file and it stays there.
 - **Broken markers stop the run.** With an unpaired, duplicated or reversed marker, nothing is written and the error names the file.
 - **One copy per file.** When `CLAUDE.md` imports `@AGENTS.md`, or is a link to it, the block only goes in `AGENTS.md`.
 - **`REMOVE=1`** takes the blocks out and deletes the files that held nothing else.
@@ -336,6 +337,38 @@ Pick them with `TARGETS=claude,agents,copilot` or `rules_targets:` in `guardrail
 The Cursor rule file is Feed Ramp's own and is rewritten whole. If a file at that path wasn't written by Feed Ramp, it's left alone and the run fails.
 
 When [agent hooks](#coding-agent-hooks) are installed, each new session also gets a one-line pointer to `COMPONENTS.md`.
+
+### Drift score
+
+```bash
+bundle exec rake ui_guardrails:feed_ramp:score                  # before
+# ...an agent session, a branch, turning Feed Ramp on...
+bundle exec rake ui_guardrails:feed_ramp:score BASELINE=last    # after, compared with the last saved run
+```
+
+```
+UI drift score: 116.7 issues per 100 templates (7 issues in 6 templates)
+
+  Hardcoded values            1  stylesheet_color 1
+  Reinvented components       4  class_itis 4
+  Accessibility               2  image_alt 1, link_name 1
+
+Against 2026-10-19T12:00:00Z, 3f2c1aa: 8 → 7 issues (−1), 133.3 → 116.7 per 100 templates
+  Hardcoded values            3 → 1 (−2)
+  Reinvented components       4 → 4 (0)
+  Accessibility               1 → 2 (+1)
+  Most changed: app/views/pages/home.html.erb −3, app/views/pages/about.html.erb +2
+```
+
+| Bucket | Counts |
+| --- | --- |
+| Hardcoded values | raw colours, arbitrary Tailwind values and inline styles in templates; hex literals in stylesheets outside the token files |
+| Reinvented components | each occurrence of a class-itis cluster or repeated markup, and each pair of near-identical partials |
+| Accessibility | static a11y findings (missing alt text, unnamed buttons and links, unlabelled inputs) |
+
+The headline is issues per 100 templates, so apps and branches of different sizes compare. Templates are the ones `ui_guardrails:audit` scans: its `scan_paths` and `ignore` apply to every bucket.
+
+Each run is saved as JSON under `.ui_guardrails/scores/` (which keeps itself out of git) with the totals, per-type and per-file counts, the git commit, the gem version and a digest of `guardrails.yml`. `BASELINE=` takes `last` or a path to any saved score, and the comparison says when the config or gem version differ between the two. To keep runs comparable it uses the detectors' default thresholds and ignores the audit's env vars. It always exits 0; gate CI with `ui_guardrails:audit`.
 
 Config in `guardrails.yml` (all optional; defaults shown):
 

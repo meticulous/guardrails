@@ -2,6 +2,7 @@
 
 require_relative "feed_ramp/manifest"
 require_relative "feed_ramp/agent_rules"
+require_relative "feed_ramp/score"
 
 module Guardrails
   # Feed Ramp: the before-the-fact half of Guardrails. Gives coding agents
@@ -14,6 +15,7 @@ module Guardrails
   #     components, Lookbook previews, call sites and tokens.
   #   - AgentRules: a block in CLAUDE.md / AGENTS.md and a Cursor rule
   #     that point agents at the manifest.
+  #   - Score: a UI drift number for before/after comparisons.
   module FeedRamp
   end
 end

@@ -179,7 +179,7 @@ namespace :ui_guardrails do
 
         if %w[1 true yes].include?(ENV["CHECK"]&.downcase)
           stale = rules.stale.map { |change| change.path.relative_path_from(root).to_s }
-          stale.unshift(manifest.path.relative_path_from(root).to_s) if manifest.stale?
+          stale = manifest.stale_paths.map { |path| path.relative_path_from(root).to_s } + stale
           abort "Feed Ramp files are out of date (#{stale.join(", ")}); run `rake ui_guardrails:feed_ramp:rules` and commit the result." if stale.any?
           puts "Feed Ramp manifest and agent rules are up to date."
           next
@@ -190,6 +190,38 @@ namespace :ui_guardrails do
         rules.write.each { |change| puts describe.call(change) }
       rescue Guardrails::Error => e
         abort e.message
+      end
+    end
+
+    desc "Score UI drift (hardcoded values, reinvented components, a11y) per 100 templates and save it under " \
+         ".ui_guardrails/scores/ (BASELINE=path|last compares; FORMAT=json). Never fails"
+    task :score do
+      require "guardrails/feed_ramp"
+      root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+      score = Guardrails::FeedRamp::Score.new(root: root)
+
+      baseline_arg = ENV["BASELINE"].to_s.strip
+      baseline_path = case baseline_arg
+                      when "" then nil
+                      when "last", "latest" then score.latest || abort("No saved score to compare with in #{score.dir.relative_path_from(root)}; run without BASELINE first.")
+                      else Pathname(baseline_arg).expand_path(root)
+                      end
+      baseline = begin
+        baseline_path && JSON.parse(baseline_path.read)
+      rescue SystemCallError, JSON::ParserError => e
+        abort "Couldn't read BASELINE=#{baseline_arg}: #{e.message}"
+      end
+
+      path = score.write
+      comparison = baseline && Guardrails::FeedRamp::Score.compare(score.to_h, baseline)
+      if ENV["FORMAT"].to_s.downcase == "json"
+        output = score.to_h.merge("saved_to" => path.relative_path_from(root).to_s)
+        output["comparison"] = comparison if comparison
+        puts JSON.pretty_generate(output)
+      else
+        puts Guardrails::FeedRamp::Score.summary(score.to_h, comparison)
+        puts ""
+        puts "Saved #{path.relative_path_from(root)}"
       end
     end
   end

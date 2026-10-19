@@ -65,7 +65,13 @@ module Guardrails
       # version. Compared by content, so an edit that changes nothing in
       # the manifest (most view edits) doesn't make it stale.
       def stale?
-        !(path.file? && markdown_path.file? && path.read == to_json && markdown_path.read == markdown)
+        stale_paths.any?
+      end
+
+      # The files that are missing or differ from what the source gives.
+      def stale_paths
+        { path => -> { to_json }, markdown_path => -> { markdown } }
+          .reject { |file, content| file.file? && file.read == content.call }.keys
       end
 
       private

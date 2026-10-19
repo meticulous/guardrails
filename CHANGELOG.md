@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   changes nothing, broken markers stop the run before anything is
   written, and `REMOVE=1` takes the blocks out again. `CHECK=1` exits 1
   when the manifest or any rules file is out of date.
+- **UI drift score.** `rake ui_guardrails:feed_ramp:score` reports issues
+  per 100 templates in three buckets (hardcoded values, reinvented
+  components, accessibility), with per-type and per-file counts, and
+  saves each run as JSON under `.ui_guardrails/scores/`. `BASELINE=last`
+  (or a path) prints the change since an earlier run; `FORMAT=json` gives
+  the data. Default detector thresholds, the audit's own `scan_paths` /
+  `ignore`, and the commit, gem version and config digest recorded, so
+  before/after runs compare. Always exits 0.
+- `Audit#templates` lists the templates a full run scans.
 - The `session_start` agent hook points new sessions at `COMPONENTS.md`
   when the app has one.
 - `Tokens#strip_comments` is public.

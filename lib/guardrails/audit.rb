@@ -142,6 +142,11 @@ module Guardrails
       scan_paths.any? { |dir| path.to_s.start_with?("#{@root.join(dir)}/") } && !ignored?(path)
     end
 
+    # The templates a full run scans, relative to root.
+    def templates
+      collect_files.map { |path| relative(path) }.sort
+    end
+
     private
 
     def load_audit_config
