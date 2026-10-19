@@ -6,6 +6,7 @@ require "stringio"
 require "yaml"
 require "guardrails/init/stack_detector"
 require "guardrails/init/config_writer"
+require "guardrails/feed_ramp/config"
 
 RSpec.describe Guardrails::Init::ConfigWriter do
   let(:root) { Pathname(Dir.mktmpdir) }
@@ -65,6 +66,15 @@ RSpec.describe Guardrails::Init::ConfigWriter do
       described_class.new(root, output: StringIO.new).write(result)
 
       expect(written_config["guardrails"]["tokens"]["near_match_policy"]).to eq("notify")
+    end
+
+    it "turns component_match on at warning, saying it can be lowered to suggestion" do
+      described_class.new(root, output: StringIO.new).write(detection_result(strategy: :scss_variables))
+
+      expect(written_config["guardrails"]["feed_ramp"]).to eq("component_match" => { "severity" => "warning" })
+      expect(root.join("guardrails.yml").read)
+        .to include("severity: warning  # lower to suggestion to report without failing the audit, or off")
+      expect(Guardrails::FeedRamp::Config.load(root).component_match.severity).to eq(:warning)
     end
 
     it "writes a header comment with the detected strategy" do

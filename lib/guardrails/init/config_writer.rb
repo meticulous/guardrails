@@ -75,11 +75,28 @@ module Guardrails
                 "allow_chars" => []
               }
             },
-            "tokens" => tokens
+            "tokens" => tokens,
+            "feed_ramp" => {
+              "component_match" => { "severity" => "warning" }
+            }
           }
         }
 
-        header(result) + config.to_yaml(line_width: -1) + threshold_footer + icons_emoji_footer
+        yaml = config.to_yaml(line_width: -1)
+                     .sub(/^(\s+severity: warning)$/, "\\1  # lower to suggestion to report without failing the audit, or off")
+        header(result) + yaml + threshold_footer + icons_emoji_footer + feed_ramp_footer
+      end
+
+      def feed_ramp_footer
+        <<~YAML
+
+          # feed_ramp.component_match flags hand-written markup that copies one of
+          # your components (same root tag and classes) once a Feed Ramp manifest
+          # exists: `rake ui_guardrails:feed_ramp:manifest`. At warning it fails
+          # `ui_guardrails:audit` like any other warning; suggestion reports it
+          # without failing. See the README's Feed Ramp section for the rest of
+          # the feed_ramp settings.
+        YAML
       end
 
       def threshold_footer

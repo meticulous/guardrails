@@ -15,13 +15,13 @@ RSpec.describe Guardrails::Report::Html do
   end
 
   it "rolls findings up by severity with links into each category" do
-    expect(html).to include("Errors — 8 findings", "Warnings — 10 findings", "Suggestions — 2 findings")
+    expect(html).to include("Errors — 8 findings", "Warnings — 11 findings", "Suggestions — 2 findings")
     expect(html).to include('<a href="#cat-raw-color">raw_color</a>', 'id="cat-raw-color"')
     expect(html).to include('id="cat-a11y-static"')
   end
 
   it "renders every finding with its suggestion, location, and framing" do
-    expect(html.scan('<article class="finding').length).to eq(20)
+    expect(html.scan('<article class="finding').length).to eq(21)
     expect(html).to include("replace with var(--primary-500)")
     expect(html).to include("app/views/welcome/broken.html.erb:7:12")
     expect(html).to include("Hex/rgb literals in color attributes bypass your design tokens.")

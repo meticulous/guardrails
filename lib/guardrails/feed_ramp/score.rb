@@ -26,7 +26,8 @@ module Guardrails
     #
     #   - hardcoded_values: raw colours and arbitrary Tailwind values and
     #     inline styles in templates, hex literals in stylesheets
-    #   - reinvented_components: occurrences of class-itis clusters and
+    #   - reinvented_components: markup copying an existing component
+    #     (component_match), occurrences of class-itis clusters and
     #     repeated markup, and pairs of near-identical partials
     #   - accessibility: the static a11y rules
     #
@@ -191,7 +192,8 @@ module Guardrails
         repeated = CrossCodebasePatterns.new(root: @root, output: sink).run
                                         .flat_map { |pattern| pattern.occurrences.map { |o| ["repeated_markup", o.file] } }
         similar = PartialSimilarity.new(root: @root, output: sink).run.map { ["similar_partials", nil] }
-        class_itis + repeated + similar
+        matches = audit_violations.select { |v| v.type == :component_match }.map { |v| ["component_match", v.file] }
+        class_itis + repeated + similar + matches
       end
 
       def accessibility

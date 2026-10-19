@@ -25,6 +25,10 @@ module Guardrails
         helper_recommended: {
           rule: "Wrapping ERB output in a literal element hides intent from static analysis and a11y tooling.",
           replacement: "Use the Rails helper for this element so attributes (including aria-*) flow through one place."
+        },
+        component_match: {
+          rule: "This markup copies one of your components; render the component so changes to it reach every use.",
+          replacement: "Render the component (see .ui_guardrails/COMPONENTS.md for its params and an example)."
         }
       }.freeze
 
@@ -151,6 +155,7 @@ module Guardrails
       end
 
       def helper_specific_replacement(violation)
+        return "Render `#{violation.value}` (see .ui_guardrails/COMPONENTS.md for its params and an example)." if violation.type == :component_match
         return nil unless violation.type == :helper_recommended
 
         HELPER_REPLACEMENTS[violation.value]

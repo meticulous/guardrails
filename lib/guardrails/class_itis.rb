@@ -142,54 +142,11 @@ module Guardrails
     end
 
     def element_tag_name(element)
-      return nil unless element.respond_to?(:open_tag) && element.open_tag
-
-      tok = element.open_tag.tag_name
-      tok && tok.respond_to?(:value) ? tok.value.to_s.downcase : nil
+      ErbParser.tag_name(element)
     end
 
-    # Pull the static portion of the element's `class` attribute. If
-    # the attribute is missing, ERB-driven, or empty, returns []. ERB
-    # fragments inside a class attribute are dropped (we can't know
-    # what they'll render); the literal pieces are concatenated and
-    # whitespace-tokenized. Tokens are sorted so two identical lists
-    # in different source order produce the same fingerprint key.
     def static_class_tokens(element)
-      attr = class_attribute_node(element)
-      return [] unless attr
-
-      static = static_attribute_value(attr)
-      return [] if static.nil? || static.strip.empty?
-
-      static.split(/\s+/).reject(&:empty?).sort.uniq
-    end
-
-    def class_attribute_node(element)
-      open_children = ErbParser.compact_children(element.open_tag)
-      open_children.find do |child|
-        next false unless child.is_a?(::Herb::AST::HTMLAttributeNode)
-
-        name_wrapper, _value_wrapper = ErbParser.compact_children(child)
-        next false unless name_wrapper
-
-        literal = ErbParser.compact_children(name_wrapper).first
-        next false unless literal && literal.respond_to?(:content)
-
-        name = literal.content.respond_to?(:value) ? literal.content.value.to_s : literal.content.to_s
-        name.downcase == "class"
-      end
-    end
-
-    def static_attribute_value(attribute_node)
-      _name_wrapper, value_wrapper = ErbParser.compact_children(attribute_node)
-      return nil unless value_wrapper
-
-      ErbParser.compact_children(value_wrapper).filter_map do |child|
-        next unless child.is_a?(::Herb::AST::LiteralNode)
-
-        content = child.content
-        content.respond_to?(:value) ? content.value.to_s : content.to_s
-      end.join
+      ErbParser.static_classes(element)
     end
 
     def print_report(clusters)

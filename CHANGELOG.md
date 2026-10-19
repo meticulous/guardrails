@@ -29,6 +29,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   changes nothing, broken markers stop the run before anything is
   written, and `REMOVE=1` takes the blocks out again. `CHECK=1` exits 1
   when the manifest or any rules file is out of date.
+- **`component_match` audit rule.** Once a Feed Ramp manifest exists,
+  `ui_guardrails:audit`, the agent hooks and the Lookbook panel flag
+  hand-written markup that copies a component: the same root tag plus
+  the component's signature class (`button` for ButtonComponent) or most
+  of a class list of three or more. The fix quotes the component's
+  usage example. A warning by default; set
+  `feed_ramp.component_match` to `suggestion` to report without
+  failing, `error`, or `off`, and tune `min_classes` / `coverage`.
+  `rails ui_guardrails:init` writes the setting with that note. The
+  manifest gains `root_element` (tag and static classes) per component,
+  and the drift score counts matches as reinvented components.
+- `ErbParser.tag_name`, `.static_classes` and `.class_tokens`. Class
+  tokens that touch ERB (`btn--<%= variant %>`) are no longer counted as
+  static classes, which can change class-itis clusters slightly.
 - **UI drift score.** `rake ui_guardrails:feed_ramp:score` reports issues
   per 100 templates in three buckets (hardcoded values, reinvented
   components, accessibility), with per-type and per-file counts, and

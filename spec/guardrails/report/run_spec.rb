@@ -86,9 +86,9 @@ RSpec.describe Guardrails::Report::Run do
     end
 
     it "gives every finding a title, and a location wherever there's a file to point at" do
-      expect(run.findings.length).to eq(20)
+      expect(run.findings.length).to eq(21)
       expect(run.findings).to all(have_attributes(title: a_string_matching(/\S/)))
-      expect(run.findings.reject { |f| f.locations.empty? }.length).to eq(20)
+      expect(run.findings.reject { |f| f.locations.empty? }.length).to eq(21)
     end
 
     it "carries the same suggestions the text report prints" do
@@ -145,7 +145,7 @@ RSpec.describe Guardrails::Report::Run do
 
     it "drops only suggestions at :warning" do
       expect(no_suggestions.findings.map(&:severity).uniq).to eq(%i[error warning])
-      expect(no_suggestions.findings.length).to eq(18)
+      expect(no_suggestions.findings.length).to eq(19)
       expect(no_suggestions.similarity).to eq([])
       expect(no_suggestions.stimulus.orphaned).to eq(["missing"])
     end

@@ -97,6 +97,18 @@ RSpec.describe Guardrails::Hooks do
       expect(outcome.message).to include("drift you just introduced", "[warning] app/views/pages/a.html.erb:1 inline_style")
     end
 
+    it "reports markup that copies a component as a warning, without refusing the stop" do
+      write("app/components/button_component.rb", "class ButtonComponent < ViewComponent::Base\nend\n")
+      write("app/components/button_component.html.erb", %(<button class="button" aria-label="<%= @label %>"></button>\n))
+      require "guardrails/feed_ramp"
+      Guardrails::FeedRamp::Manifest.new(root: @root).write
+      write("app/views/pages/a.html.erb", %(<button class="button">Save</button>\n))
+
+      outcome = described_class.check(event(:edit, files: ["app/views/pages/a.html.erb"]))
+      expect(outcome.message).to include("[warning] app/views/pages/a.html.erb:1 component_match", "render ButtonComponent")
+      expect(described_class.check(event(:stop)).block).to be false
+    end
+
     it "refuses to stop on a new error, once, and lets warnings through" do
       write("app/views/pages/a.html.erb", %(<p style="margin: 4px">ok</p>\n))
       expect(described_class.check(event(:stop)).block).to be false

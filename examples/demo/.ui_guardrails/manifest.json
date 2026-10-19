@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "generator": "ui_guardrails 1.7.1",
+  "libraries": {
+    "lookbook": null,
+    "phlex": null,
+    "phlex-rails": null,
+    "view_component": null
+  },
+  "components": [
+    {
+      "name": "ButtonComponent",
+      "kind": "view_component",
+      "file": "app/components/button_component.rb",
+      "line": 3,
+      "template": "app/components/button_component.html.erb",
+      "superclass": "ViewComponent::Base",
+      "root_element": {
+        "tag": "button",
+        "classes": [
+          "button"
+        ]
+      },
+      "description": null,
+      "params": [
+        {
+          "name": "label",
+          "kind": "keyword",
+          "required": true,
+          "default": null,
+          "type": null,
+          "description": null
+        },
+        {
+          "name": "variant",
+          "kind": "keyword",
+          "required": false,
+          "default": ":primary",
+          "type": null,
+          "description": null
+        }
+      ],
+      "slots": [
+        {
+          "name": "icon",
+          "kind": "renders_one",
+          "type": null,
+          "params": [],
+          "heuristic": false
+        }
+      ],
+      "previews": [
+        {
+          "name": "primary",
+          "label": null,
+          "description": null,
+          "hidden": false,
+          "params": [],
+          "file": "test/components/previews/button_component_preview.rb",
+          "line": 4
+        },
+        {
+          "name": "with_icon",
+          "label": null,
+          "description": null,
+          "hidden": false,
+          "params": [],
+          "file": "test/components/previews/button_component_preview.rb",
+          "line": 8
+        }
+      ],
+      "example": {
+        "source": "render(ButtonComponent.new(label: \"Save\"))",
+        "file": "test/components/previews/button_component_preview.rb",
+        "line": 5,
+        "from": "preview",
+        "language": "ruby"
+      }
+    },
+    {
+      "name": "CardComponent",
+      "kind": "view_component",
+      "file": "app/components/card_component.rb",
+      "line": 5,
+      "template": "app/components/card_component.html.erb",
+      "superclass": "ViewComponent::Base",
+      "root_element": {
+        "tag": "article",
+        "classes": [
+          "card"
+        ]
+      },
+      "description": "Seeded broken: no preview file, and `unused_actions` slot is declared\nbut the template never renders it.",
+      "params": [
+        {
+          "name": "title",
+          "kind": "keyword",
+          "required": true,
+          "default": null,
+          "type": null,
+          "description": null
+        }
+      ],
+      "slots": [
+        {
+          "name": "header",
+          "kind": "renders_one",
+          "type": null,
+          "params": [],
+          "heuristic": false
+        },
+        {
+          "name": "unused_actions",
+          "kind": "renders_many",
+          "type": null,
+          "params": [],
+          "heuristic": false
+        }
+      ],
+      "previews": [],
+      "example": null
+    },
+    {
+      "name": "IconButtonComponent",
+      "kind": "view_component",
+      "file": "app/components/icon_button_component.rb",
+      "line": 3,
+      "template": "app/components/icon_button_component.html.erb",
+      "superclass": "ViewComponent::Base",
+      "root_element": {
+        "tag": "button",
+        "classes": [
+          "icon-button"
+        ]
+      },
+      "description": null,
+      "params": [
+        {
+          "name": "label",
+          "kind": "keyword",
+          "required": true,
+          "default": null,
+          "type": null,
+          "description": null
+        },
+        {
+          "name": "variant",
+          "kind": "keyword",
+          "required": false,
+          "default": ":primary",
+          "type": null,
+          "description": null
+        }
+      ],
+      "slots": [
+        {
+          "name": "icon",
+          "kind": "renders_one",
+          "type": null,
+          "params": [],
+          "heuristic": false
+        }
+      ],
+      "previews": [],
+      "example": null
+    }
+  ],
+  "tokens": [
+    {
+      "name": "--neutral-100",
+      "value": "#f5f5f5",
+      "syntax": "css_var",
+      "category": "color",
+      "file": "app/assets/stylesheets/tokens/_colors.css",
+      "line": 6
+    },
+    {
+      "name": "--neutral-900",
+      "value": "#1a1a1a",
+      "syntax": "css_var",
+      "category": "color",
+      "file": "app/assets/stylesheets/tokens/_colors.css",
+      "line": 5
+    },
+    {
+      "name": "--primary-500",
+      "value": "#0066ff",
+      "syntax": "css_var",
+      "category": "color",
+      "file": "app/assets/stylesheets/tokens/_colors.css",
+      "line": 2
+    },
+    {
+      "name": "--primary-600",
+      "value": "#0055dd",
+      "syntax": "css_var",
+      "category": "color",
+      "file": "app/assets/stylesheets/tokens/_colors.css",
+      "line": 3
+    },
+    {
+      "name": "--secondary-500",
+      "value": "#ffaa33",
+      "syntax": "css_var",
+      "category": "color",
+      "file": "app/assets/stylesheets/tokens/_colors.css",
+      "line": 4
+    }
+  ]
+}

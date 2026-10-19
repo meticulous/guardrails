@@ -9,6 +9,7 @@ require_relative "discovery"
 require_relative "usages"
 require_relative "design_tokens"
 require_relative "components_markdown"
+require_relative "root_element"
 
 module Guardrails
   module FeedRamp
@@ -101,6 +102,7 @@ module Guardrails
           "line" => component.info.line,
           "template" => component.template,
           "superclass" => discovery.index.superclass_of(component.info),
+          "root_element" => RootElement.for(component, @root),
           "description" => doc.text.empty? ? nil : doc.text,
           "params" => discovery.params(component),
           "slots" => discovery.slots(component),

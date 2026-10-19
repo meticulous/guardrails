@@ -3,8 +3,10 @@
 require "pathname"
 require "set"
 require "stringio"
+require "json"
 require "yaml"
 require_relative "erb_parser"
+require_relative "feed_ramp/config"
 require_relative "report/style"
 require_relative "report/finding"
 require_relative "report/severity"
@@ -89,7 +91,7 @@ module Guardrails
       # SUGGEST checklist, and the returned list (→ exit code, JSON)
       # all agree on what this run was about.
       violations = collect_files.flat_map { |file| scan_file(file) }.select do |v|
-        Report::Severity.include?(SEVERITY_FOR_TYPE.fetch(v.type, :warning), @min_severity)
+        reported?(v.type)
       end
       print_report(violations)
       remaining = @apply ? apply_auto_fixes(violations) : violations
@@ -106,7 +108,7 @@ module Guardrails
         list = by_type[type]
         next if list.nil? || list.empty?
 
-        severity = SEVERITY_FOR_TYPE.fetch(type, :warning)
+        severity = severity_for(type)
         auto_fix = AUTO_FIXABLE_TYPES.include?(type)
         Report::Category.new(
           name: type.to_s, severity: severity, framing: FRAMING_FOR_TYPE[type], auto_fix: auto_fix,
@@ -129,7 +131,7 @@ module Guardrails
     # check scan_paths or ignores; ask `covers?` first.
     def scan_source(path, content = nil)
       scan_file(Pathname(path).expand_path(@root), content).select do |v|
-        Report::Severity.include?(SEVERITY_FOR_TYPE.fetch(v.type, :warning), @min_severity)
+        reported?(v.type)
       end
     end
 
@@ -140,6 +142,15 @@ module Guardrails
       return false unless path.to_s.end_with?(".html.erb")
 
       scan_paths.any? { |dir| path.to_s.start_with?("#{@root.join(dir)}/") } && !ignored?(path)
+    end
+
+    # A violation type's severity: fixed per type, except
+    # `component_match`, set by `feed_ramp.component_match` in
+    # guardrails.yml (nil when it's off).
+    def severity_for(type)
+      return component_match_settings.severity if type == :component_match
+
+      SEVERITY_FOR_TYPE.fetch(type, :warning)
     end
 
     # The templates a full run scans, relative to root.
@@ -196,7 +207,96 @@ module Guardrails
       detect_inline_styles_ast(ast_result, file, original_lines) +
         detect_raw_color_literals_ast(ast_result, file, original_lines) +
         detect_tailwind_arbitrary_ast(ast_result, file, original_lines) +
-        detect_helper_recommended_ast(ast_result, file, original_lines)
+        detect_helper_recommended_ast(ast_result, file, original_lines) +
+        detect_component_match_ast(ast_result, file, original_lines)
+    end
+
+    def reported?(type)
+      severity = severity_for(type)
+      !severity.nil? && Report::Severity.include?(severity, @min_severity)
+    end
+
+    def component_match_settings
+      @component_match_settings ||= FeedRamp::Config.load(@root).component_match
+    end
+
+    # Components to match markup against: those in the committed Feed
+    # Ramp manifest whose root element is recognisable, by enough static
+    # classes or by a class named after the component. None without a
+    # manifest, so the rule is silent until
+    # `ui_guardrails:feed_ramp:manifest` has been run.
+    def matchable_components
+      @matchable_components ||= begin
+        path = FeedRamp::Config.load(@root).manifest_path(@root)
+        components = path.file? ? Array(JSON.parse(path.read)["components"]) : []
+        components.select do |component|
+          root = component["root_element"]
+          next false unless root.is_a?(Hash)
+
+          Array(root["classes"]).length >= component_match_settings.min_classes || signature_class(component)
+        end
+      rescue JSON::ParserError, SystemCallError
+        []
+      end
+    end
+
+    # Elements carrying the root tag and most of the root classes of an
+    # existing component: markup that should be a `render` of it. One
+    # finding per element, for the component it covers best. A
+    # component's own template is never matched against itself.
+    def detect_component_match_ast(parse_result, file, original_lines)
+      return [] if severity_for(:component_match).nil? || matchable_components.empty?
+
+      path = relative(file)
+      results = []
+      ErbParser.each_node(parse_result.document) do |node|
+        next unless node.is_a?(::Herb::AST::HTMLElementNode)
+
+        tag = ErbParser.tag_name(node)
+        classes = ErbParser.static_classes(node)
+        next if tag.nil? || classes.empty?
+
+        match = best_component_match(tag, classes, path)
+        next unless match
+
+        line, column = ErbParser.start_position(node)
+        results << Violation.new(type: :component_match, file: path, line: line, column: column,
+                                 snippet: snippet(original_lines, line - 1), value: match["name"])
+      end
+      results
+    end
+
+    # The component its markup matches best: the same tag, and either
+    # most of a long-enough class list, or its signature class.
+    def best_component_match(tag, classes, path)
+      settings = component_match_settings
+      scored = matchable_components.filter_map do |component|
+        root = component["root_element"]
+        next if root["tag"] != tag || component["template"] == path
+
+        wanted = root["classes"]
+        coverage = (classes & wanted).length.fdiv(wanted.length)
+        by_classes = wanted.length >= settings.min_classes && coverage >= settings.coverage
+        by_signature = classes.include?(signature_class(component))
+        [component, coverage, wanted.length] if by_classes || by_signature
+      end
+      scored.min_by { |component, coverage, size| [-coverage, -size, component["name"]] }&.first
+    end
+
+    # The root class named after the component (`button` or
+    # `button-component` for ButtonComponent, `icon-button` /
+    # `icon_button` for IconButtonComponent, `alert` for
+    # Components::Alert), which marks markup as that component's even
+    # when it's the only class. nil when the root has none.
+    def signature_class(component)
+      @signature_classes ||= {}
+      @signature_classes.fetch(component["name"]) do
+        words = component["name"].to_s.split("::").last.to_s
+                                 .gsub(/([a-z\d])([A-Z])/, '\1_\2').gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2').downcase
+        base = words.delete_suffix("_component")
+        names = [base, words].uniq.flat_map { |name| [name.tr("_", "-"), name] }.uniq
+        @signature_classes[component["name"]] = (Array(component.dig("root_element", "classes")) & names).first
+      end
     end
 
     # AST-based inline_style detector. Walks the parsed document for
@@ -529,7 +629,7 @@ module Guardrails
       end
     end
 
-    TYPE_ORDER = %i[inline_style raw_color tailwind_arbitrary helper_recommended
+    TYPE_ORDER = %i[inline_style raw_color tailwind_arbitrary helper_recommended component_match
                     image_alt button_name link_name input_label].freeze
 
     SEVERITY_FOR_TYPE = {
@@ -537,6 +637,7 @@ module Guardrails
       raw_color: :error,
       tailwind_arbitrary: :error,
       helper_recommended: :warning,
+      component_match: :warning,
       image_alt: :error,
       button_name: :error,
       link_name: :error,
@@ -548,6 +649,7 @@ module Guardrails
       raw_color: "Hex/rgb literals in color attributes bypass your design tokens. Run APPLY=1 to auto-fix where a token matches; SUGGEST=1 writes a markdown checklist.",
       tailwind_arbitrary: "Arbitrary Tailwind values (bg-[#fa3] etc.) bypass your theme. Add the value to theme.colors / theme.fontSize and use the named utility, or APPLY=1 to auto-fix where a token matches.",
       helper_recommended: "Literal <button>/<a> wrapping ERB output hides intent from static analysis and a11y tooling. Switch to tag.button / link_to / button_to so attributes flow through one place.",
+      component_match: "Hand-written markup with the root element and classes of one of your components. Render the component instead, so a change to it reaches every use. Components come from the Feed Ramp manifest (rake ui_guardrails:feed_ramp:manifest).",
       image_alt: "Images need accessible alt text. Use alt=\"\" for purely decorative images.",
       button_name: "Buttons need an accessible name — text content, aria-label, or aria-labelledby.",
       link_name: "Links need an accessible name — text content, aria-label, or aria-labelledby.",
@@ -557,7 +659,7 @@ module Guardrails
     AUTO_FIXABLE_TYPES = %i[raw_color tailwind_arbitrary].freeze
 
     def print_violation_type(type, violations)
-      severity = SEVERITY_FOR_TYPE.fetch(type, :warning)
+      severity = severity_for(type)
       auto_fix_marker = AUTO_FIXABLE_TYPES.include?(type) ? ", auto-fix available" : ""
 
       @output.puts ""
@@ -585,6 +687,9 @@ module Guardrails
         violation.value
       when :inline_style
         violation.value || "<inline style>"
+      when :component_match
+        open_tag = violation.snippet.to_s[/<[^>]*>/] || violation.snippet.to_s.strip
+        "#{open_tag.length > 70 ? "#{open_tag[0, 69]}…" : open_tag} looks like #{violation.value}"
       else
         violation.snippet.to_s[0, 60]
       end
@@ -626,6 +731,8 @@ module Guardrails
         "extract to a CSS class or component stylesheet"
       when :helper_recommended
         helper_recommended_suggestion(violation)
+      when :component_match
+        component_match_suggestion(violation)
       when :image_alt
         "add an alt attribute (or alt=\"\" if decorative)"
       when :button_name
@@ -656,6 +763,16 @@ module Guardrails
       when :tailwind then token.name.to_s
       else token.name.to_s
       end
+    end
+
+    # "render ButtonComponent", with the start of its usage example from
+    # the manifest when it has one.
+    def component_match_suggestion(violation)
+      component = matchable_components.find { |c| c["name"] == violation.value }
+      example = component&.dig("example", "source").to_s.lines.first.to_s.strip
+      return "render #{violation.value} instead" if example.empty?
+
+      "render #{violation.value} instead, e.g. #{example.length > 90 ? "#{example[0, 89]}…" : example}"
     end
 
     def helper_recommended_suggestion(violation)

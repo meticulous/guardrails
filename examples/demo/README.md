@@ -42,6 +42,7 @@ examples/demo/
 ├── config/                                minimal Rails skeleton (no AR/AC/AM/AJ)
 ├── bin/                                   rails + setup
 ├── guardrails.yml                         config the gem reads
+├── .ui_guardrails/                        Feed Ramp manifest + COMPONENTS.md (rake ui_guardrails:feed_ramp:manifest)
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb
@@ -76,7 +77,7 @@ examples/demo/
 
 | Audit | Expected |
 |---|---|
-| `audit` view scan | inline_style, raw_color (×2 matching tokens, ×1 no match), tailwind_arbitrary, helper_recommended (on `<button><%= variant %>`) |
+| `audit` view scan | inline_style, raw_color (×2 matching tokens, ×1 no match), tailwind_arbitrary, helper_recommended (on `<button><%= variant %>`), component_match (hand-written ButtonComponent in `welcome/broken.html.erb`, found through `.ui_guardrails/manifest.json`) |
 | `audit` stimulus | 1 orphaned (`data-controller="missing"`), 1 dead (`dead_controller.js`) |
 | `audit` partial similarity | `_hero_card.html.erb` ↔ `_hero_card_alt.html.erb`, plus button vs icon_button components |
 | `audit` view components | `card_component` missing preview, `card_component` orphan slot |

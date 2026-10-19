@@ -39,6 +39,17 @@ RSpec.describe Guardrails::FeedRamp::Manifest do
       expect(components["Components::Alert"]["superclass"]).to eq("Components::Base")
     end
 
+    it "records each component's root element: its tag and the classes it always has" do
+      expect(components.transform_values { |c| c["root_element"] }).to eq(
+        "Admin::BadgeComponent" => { "tag" => "span", "classes" => ["badge"] },  # tag.span in `call`
+        "ButtonComponent" => { "tag" => "button", "classes" => ["btn"] },       # not `btn--<%= @variant %>`
+        "CardComponent" => { "tag" => "section", "classes" => ["card"] },
+        "Components::Alert" => { "tag" => "div", "classes" => ["alert"] },      # not `alert--#{@tone}`
+        "IconComponent" => nil,
+        "TooltipComponent" => { "tag" => "span", "classes" => [] }
+      )
+    end
+
     it "captures constructor params with defaults, and YARD @param docs" do
       expect(components["ButtonComponent"]["params"]).to eq([
         { "name" => "label", "kind" => "keyword", "required" => true, "default" => nil,

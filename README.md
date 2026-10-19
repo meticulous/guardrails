@@ -118,6 +118,7 @@ Static AST walk over every `.html.erb` under `app/views/` and `app/components/` 
 | `raw_color` | Hex / rgb literals in color-bearing attributes (`fill`, `stroke`, `color`, `bgcolor`, `background`, `data-*color*`, etc.). |
 | `tailwind_arbitrary` | `bg-[#fa3]`, `text-[14px]`, `p-[7px]` — arbitrary values that bypass the theme. |
 | `helper_recommended` | `<button>` / `<a>` wrapping `<%= … %>` ERB output. Suggests `tag.button` / `link_to` / `button_to` for clean accessible names. Skips elements that already have `aria-label`. |
+| `component_match` | Hand-written markup copying one of your components: the same root tag plus its signature class (`class="button …"` for ButtonComponent) or most of its classes. Suggests the component's real usage example. Needs a [Feed Ramp](#component-match) manifest; warning by default. |
 | `image_alt` / `button_name` / `link_name` / `input_label` | The four most common static a11y misses (see [`doc/A11Y.md`](doc/A11Y.md)). |
 
 ### Suggest mode and auto-fix
@@ -338,6 +339,37 @@ The Cursor rule file is Feed Ramp's own and is rewritten whole. If a file at tha
 
 When [agent hooks](#coding-agent-hooks) are installed, each new session also gets a one-line pointer to `COMPONENTS.md`.
 
+### Component match
+
+Once a manifest exists, `ui_guardrails:audit` (and so the agent hooks and the Lookbook panel) flags markup that copies one of your components instead of rendering it:
+
+```
+! WARNING — component_match (1 finding)
+  [warning]  component_match: <button type="button" class="button button--primary"> looks like ButtonComponent
+    → render ButtonComponent instead, e.g. render(ButtonComponent.new(label: "Save"))
+    app/views/welcome/broken.html.erb:42:1
+```
+
+Each component's root element is read when the manifest is built: the first element of its ERB template, or the first tag its Phlex `view_template` (or ViewComponent `call`) builds. Its classes are the static ones only; `btn--<%= @variant %>` and `alert--#{@tone}` don't count. Markup matches when it has the same tag and either:
+
+- **the component's signature class:** a root class named after the component (`button` or `button-component` for ButtonComponent, `icon-button` for IconButtonComponent), even on its own; or
+- **most of a long class list:** at least `coverage` (0.8) of the root's classes, when the root has at least `min_classes` (3). Shorter lists of generic utilities never match.
+
+A component's own template is never matched against itself. The rule reads the committed manifest rather than parsing the app, so it adds nothing noticeable to a hook call, and it says nothing until `ui_guardrails:feed_ramp:manifest` has run.
+
+It's a **warning**, so it fails `ui_guardrails:audit` like any other warning. To try it out first, lower it to a suggestion, which reports without failing:
+
+```yaml
+guardrails:
+  feed_ramp:
+    component_match: suggestion     # or warning (default), error, off
+    # or, to tune matching too:
+    # component_match:
+    #   severity: suggestion
+    #   min_classes: 3
+    #   coverage: 0.8
+```
+
 ### Drift score
 
 ```bash
@@ -363,7 +395,7 @@ Against 2026-10-19T12:00:00Z, 3f2c1aa: 8 → 7 issues (−1), 133.3 → 116.7 pe
 | Bucket | Counts |
 | --- | --- |
 | Hardcoded values | raw colours, arbitrary Tailwind values and inline styles in templates; hex literals in stylesheets outside the token files |
-| Reinvented components | each occurrence of a class-itis cluster or repeated markup, and each pair of near-identical partials |
+| Reinvented components | markup copying a component (`component_match`), each occurrence of a class-itis cluster or repeated markup, and each pair of near-identical partials |
 | Accessibility | static a11y findings (missing alt text, unnamed buttons and links, unlabelled inputs) |
 
 The headline is issues per 100 templates, so apps and branches of different sizes compare. Templates are the ones `ui_guardrails:audit` scans: its `scan_paths` and `ignore` apply to every bucket.

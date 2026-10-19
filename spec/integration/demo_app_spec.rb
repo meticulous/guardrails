@@ -29,6 +29,18 @@ RSpec.describe "examples/demo" do
       expect(types[:raw_color]).to eq(3)
       expect(types[:tailwind_arbitrary]).to eq(2)
     end
+
+    it "has an up-to-date Feed Ramp manifest committed (regenerate with rake ui_guardrails:feed_ramp:manifest)" do
+      require "guardrails/feed_ramp"
+      expect(Guardrails::FeedRamp::Manifest.new(root: root).stale_paths).to be_empty
+    end
+
+    it "flags the hand-written ButtonComponent in welcome/broken.html.erb, from the committed manifest" do
+      violations = Guardrails::Audit.new(root: root, output: StringIO.new).run
+
+      matches = violations.select { |v| v.type == :component_match }
+      expect(matches.map { |v| [v.file, v.value] }).to eq([["app/views/welcome/broken.html.erb", "ButtonComponent"]])
+    end
   end
 
   describe "ui_guardrails:audit (stimulus)" do

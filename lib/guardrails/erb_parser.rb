@@ -80,6 +80,59 @@ module Guardrails
       end
     end
 
+    # An element's tag name, downcased, or nil.
+    def tag_name(element)
+      return nil unless element.respond_to?(:open_tag) && element.open_tag
+
+      tok = element.open_tag.tag_name
+      tok.respond_to?(:value) ? tok.value.to_s.downcase : nil
+    end
+
+    # The static portion of an element's `class` attribute, as sorted,
+    # unique tokens. ERB fragments inside the attribute are dropped (we
+    # can't know what they'll render); a missing or ERB-only attribute
+    # gives [].
+    def static_classes(element)
+      attr = attribute(element, "class")
+      return [] unless attr
+
+      _name_wrapper, value_wrapper = compact_children(attr)
+      return [] unless value_wrapper
+
+      pieces = compact_children(value_wrapper).map do |child|
+        next nil unless child.is_a?(::Herb::AST::LiteralNode)
+
+        content = child.content
+        content.respond_to?(:value) ? content.value.to_s : content.to_s
+      end
+      class_tokens(pieces)
+    end
+
+    # Class tokens from a value written in pieces: strings, and nil for
+    # each dynamic part. A token touching a dynamic part (`btn--` in
+    # `btn--<%= variant %>`) isn't a class anyone can know, so it's left
+    # out.
+    def class_tokens(pieces)
+      pieces.map { |piece| piece.nil? ? "\0" : piece.delete("\0") }.join
+            .split(/\s+/).reject { |token| token.empty? || token.include?("\0") }.sort.uniq
+    end
+
+    # An element's attribute node by name, or nil.
+    def attribute(element, name)
+      return nil unless element.respond_to?(:open_tag) && element.open_tag
+
+      compact_children(element.open_tag).find do |child|
+        next false unless child.is_a?(::Herb::AST::HTMLAttributeNode)
+
+        name_wrapper, _value_wrapper = compact_children(child)
+        literal = name_wrapper && compact_children(name_wrapper).first
+        next false unless literal.respond_to?(:content)
+
+        text = literal.content.respond_to?(:value) ? literal.content.value.to_s : literal.content.to_s
+        text.downcase == name
+      end
+    end
+
     # Convert a Herb location to (line, column) for a node's start.
     # Herb uses 1-indexed lines and 0-indexed columns; Guardrails violations
     # use 1-indexed columns. This adjusts for that.

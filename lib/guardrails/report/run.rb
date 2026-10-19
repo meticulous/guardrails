@@ -111,8 +111,8 @@ module Guardrails
         # (similarity, patterns) rather than computing results to
         # discard. Audit and A11yDeep emit mixed severities, so they
         # always run and filter internally.
-        @violations = detect(Audit.new(**common, suggest: @suggest, apply: @apply, format: :text,
-                                                 min_severity: @min_severity))
+        @audit = Audit.new(**common, suggest: @suggest, apply: @apply, format: :text, min_severity: @min_severity)
+        @violations = detect(@audit)
         @stimulus = wanted?(:warning) ? detect(StimulusAudit.new(**common)) : StimulusAudit::Result.new(orphaned: [], dead: [])
         @similarity = wanted?(:suggestion) ? detect(PartialSimilarity.new(**common, **@similarity_opts)) : []
         @view_components = if wanted?(:warning) then detect(ViewComponentAudit.new(**common))
@@ -174,6 +174,7 @@ module Guardrails
           entry("tailwind_arbitrary", count_type(:tailwind_arbitrary), :error, auto_fix: true),
           entry("inline_style", count_type(:inline_style), :warning),
           entry("helper_recommended", count_type(:helper_recommended), :warning),
+          entry("component_match", count_type(:component_match), @audit.severity_for(:component_match) || :warning),
           entry("a11y (static)", a11y.length, :error),
           entry("a11y (deep)", a11y_deep.length, :error),
           entry("stimulus orphaned", stimulus.orphaned.length, :warning),
@@ -200,12 +201,12 @@ module Guardrails
       end
 
       # Exit-code contract: each detector fails on its own rule. Built-in
-      # errors and warnings fail on any finding, and so do similar
-      # partials; cross-codebase patterns and class-itis never fail.
+      # errors and warnings fail on any finding (a `component_match`
+      # lowered to suggestion doesn't), and so do similar partials; cross-codebase patterns and class-itis never fail.
       # Deep a11y and visual diff fail when a finding crosses their
       # threshold. Registered detectors decide for themselves.
       def failing?
-        violations.any? || stimulus.violations? || similarity.any? ||
+        violations.any? { |v| @audit.severity_for(v.type) != :suggestion } || stimulus.violations? || similarity.any? ||
           view_components.violations? || a11y.any? ||
           (@a11y_deep_runner&.any_failing?(a11y_deep) || false) ||
           (@visual_diff_runner&.any_failing?(visual_diff) || false) ||

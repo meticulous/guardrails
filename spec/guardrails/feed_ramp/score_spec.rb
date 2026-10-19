@@ -71,6 +71,15 @@ RSpec.describe Guardrails::FeedRamp::Score do
       expect(data["files"].keys.grep(/layouts/)).to be_empty
     end
 
+    it "counts markup copying a component as reinvented, once there's a manifest" do
+      write_file("app/components/button_component.rb", "class ButtonComponent < ViewComponent::Base\nend\n")
+      write_file("app/components/button_component.html.erb", %(<button class="button" aria-label="<%= @label %>"></button>\n))
+      Guardrails::FeedRamp::Manifest.new(root: @root).write
+      write_file("app/views/pages/about.html.erb", %(<button class="button">Go</button>\n))
+
+      expect(score.to_h.dig("buckets", "reinvented_components", "by_type")).to eq("class_itis" => 4, "component_match" => 1)
+    end
+
     it "ignores the audit's env vars, so runs stay comparable" do
       before = score.to_h
       original = ENV.to_h.slice("CLASSITIS_MIN_OCCURRENCES", "SEVERITY")
