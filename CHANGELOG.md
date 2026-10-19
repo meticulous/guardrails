@@ -29,6 +29,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   changes nothing, broken markers stop the run before anything is
   written, and `REMOVE=1` takes the blocks out again. `CHECK=1` exits 1
   when the manifest or any rules file is out of date.
+- **Feed Ramp MCP server.** `ui_guardrails-mcp` (or
+  `rake ui_guardrails:feed_ramp:mcp`) serves `list_components`,
+  `get_component`, `search_components` and `check_snippet` over stdio.
+  `check_snippet` runs the audit and static a11y over ERB and checks
+  every `Component.new(...)` in ERB or Ruby against the manifest:
+  unknown components, keywords they don't take, required ones missing,
+  positional counts, likely typos. The server keeps the manifest fresh
+  as files change and rewrites `.ui_guardrails/` when that changes it
+  (`--no-write` to opt out). `rake ui_guardrails:feed_ramp:mcp:install`
+  adds it to `.mcp.json`, `.cursor/mcp.json` or `.gemini/settings.json`
+  (`AGENT=`), keeping everything else in them. The agent rules block
+  mentions the tools once a config starts the server.
 - **`component_match` audit rule.** Once a Feed Ramp manifest exists,
   `ui_guardrails:audit`, the agent hooks and the Lookbook panel flag
   hand-written markup that copies a component: the same root tag plus

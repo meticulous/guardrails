@@ -31,7 +31,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
   # `guardrails-hook <agent> <event>`, called by coding agents' hooks.
   spec.bindir = "exe"
-  spec.executables = ["guardrails-hook"]
+  spec.executables = ["guardrails-hook", "ui_guardrails-mcp"]
 
   spec.add_dependency "railties", ">= 7.2"
   # Herb is a parser for HTML+ERB that exposes a real AST. Replaces the

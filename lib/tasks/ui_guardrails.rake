@@ -224,6 +224,41 @@ namespace :ui_guardrails do
         puts "Saved #{path.relative_path_from(root)}"
       end
     end
+
+    desc "Run the Feed Ramp MCP server over stdio (list_components, get_component, search_components, check_snippet); " \
+         "same as the ui_guardrails-mcp executable"
+    task :mcp do
+      require "guardrails/feed_ramp/mcp"
+      root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+      protocol = $stdout
+      protocol.sync = true
+      $stdout = $stderr # only protocol messages may reach stdout
+      library = Guardrails::FeedRamp::MCP::Library.new(root: root, write: !%w[0 false no].include?(ENV["WRITE"]&.downcase))
+      Guardrails::FeedRamp::MCP::Server.new(library: library, input: $stdin, output: protocol).run
+    ensure
+      $stdout = protocol if protocol
+    end
+
+    namespace :mcp do
+      desc "Add the Feed Ramp MCP server to coding agents' project config (AGENT=claude,cursor,gemini or all; default claude)"
+      task :install do
+        require "guardrails/feed_ramp/mcp_install"
+        root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+        agents = ENV.fetch("AGENT", "claude").split(",").map(&:strip).reject(&:empty?)
+        agents = Guardrails::FeedRamp::MCPInstall::AGENTS.keys if agents == ["all"]
+
+        begin
+          changes = Guardrails::FeedRamp::MCPInstall.new(root: root, agents: agents).call
+        rescue Guardrails::Error => e
+          abort e.message
+        end
+
+        changes.each do |change|
+          puts "#{change.changed ? "Added the ui_guardrails MCP server to" : "Already set up:"} #{change.path} (#{change.agent})"
+        end
+        puts "Claude Code asks you to approve project MCP servers the first time it starts them." if agents.include?("claude")
+      end
+    end
   end
 
   namespace :hooks do

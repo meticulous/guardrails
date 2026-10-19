@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The Feed Ramp MCP server, over stdio: `ui_guardrails-mcp [--root DIR]
+# [--no-write]`. `rake ui_guardrails:feed_ramp:mcp:install` writes the
+# agent configuration that starts it.
+require "optparse"
+
+root = Dir.pwd
+write = true
+OptionParser.new do |opts|
+  opts.banner = "Usage: ui_guardrails-mcp [--root DIR] [--no-write]"
+  opts.on("--root DIR", "The Rails app (default: the current directory)") { |dir| root = dir }
+  opts.on("--[no-]write", "Rewrite .ui_guardrails/ when the components change (default: on)") { |value| write = value }
+  opts.on("-v", "--version") do
+    require "guardrails/version"
+    puts Guardrails::VERSION
+    exit
+  end
+end.parse!
+
+# Stdout carries the protocol and nothing else: keep it for the server,
+# and send anything else that prints there to stderr.
+protocol = $stdout
+protocol.sync = true
+$stdout = $stderr
+
+require "guardrails"
+require "guardrails/feed_ramp/mcp"
+
+library = Guardrails::FeedRamp::MCP::Library.new(root: root, write: write)
+Guardrails::FeedRamp::MCP::Server.new(library: library, input: $stdin, output: protocol).run

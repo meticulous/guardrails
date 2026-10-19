@@ -54,6 +54,12 @@ RSpec.describe Guardrails::FeedRamp::AgentRules do
                                "- color (1): `--color-brand`", "rake ui_guardrails:audit")
     end
 
+    it "mentions the MCP tools only when a project config starts the server" do
+      expect(rules.block).not_to include("check_snippet")
+      write_file(".mcp.json", %({"mcpServers": {"ui_guardrails": {"command": "ui_guardrails-mcp"}}}))
+      expect(rules.block).to include("`search_components`", "`check_snippet`")
+    end
+
     it "caps the component list and says where the rest are" do
       many = manifest.merge("components" => Array.new(60) { |i| { "name" => format("C%02dComponent", i) } })
       block = rules(data: many).block

@@ -36,6 +36,9 @@ module Guardrails
       # through AGENTS.md, so CLAUDE.md doesn't get a second copy.
       AGENTS_IMPORT = %r{(?:\A|\s)@(?:\./)?AGENTS\.md\b}
 
+      # Project configs that can start the Feed Ramp MCP server.
+      MCP_CONFIGS = %w[.mcp.json .cursor/mcp.json .gemini/settings.json].freeze
+
       COMPONENT_INDEX_LIMIT = 50
       TOKEN_EXAMPLES = 3
 
@@ -114,6 +117,10 @@ module Guardrails
                   "`#{@manifest_path}` has the same data as JSON."
           list << "- Follow the component's usage example rather than copying its HTML. " \
                   "Only write a new component when none fits, and say why."
+          if mcp_installed?
+            list << "- The `ui_guardrails` MCP server answers the same questions as tools: `search_components`, " \
+                    "`get_component`, and `check_snippet` to check ERB or Phlex before writing the file."
+          end
         end
         if tokens.any?
           list << "- Use the design tokens listed in `#{@markdown_path}` instead of raw colours, " \
@@ -122,6 +129,10 @@ module Guardrails
         list << "- `rake ui_guardrails:audit` reports UI drift (raw colours, inline styles, missing alt text) " \
                 "in the views you changed."
         list
+      end
+
+      def mcp_installed?
+        MCP_CONFIGS.any? { |file| (path = @root.join(file)).file? && path.read.include?("ui_guardrails-mcp") }
       end
 
       def component_index

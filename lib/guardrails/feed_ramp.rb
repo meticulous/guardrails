@@ -16,6 +16,8 @@ module Guardrails
   #   - AgentRules: a block in CLAUDE.md / AGENTS.md and a Cursor rule
   #     that point agents at the manifest.
   #   - Score: a UI drift number for before/after comparisons.
+  #   - MCP (`feed_ramp/mcp`, loaded on its own): the manifest as tools
+  #     for coding agents, run by `ui_guardrails-mcp`.
   module FeedRamp
   end
 end

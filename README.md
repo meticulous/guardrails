@@ -100,6 +100,7 @@ APPLY=1 bundle exec rake ui_guardrails:audit
 | `ui_guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
 | `ui_guardrails:feed_ramp:manifest` | Writes `.ui_guardrails/manifest.json` and `COMPONENTS.md`: the app's components and tokens, for coding agents. `CHECK=1` exits 1 when they're out of date. See [Feed Ramp](#feed-ramp). |
 | `ui_guardrails:feed_ramp:score` | Scores UI drift per 100 templates (hardcoded values, reinvented components, a11y) and saves it under `.ui_guardrails/scores/`. `BASELINE=last` or a path compares two runs; `FORMAT=json`. Never fails. See [Drift score](#drift-score). |
+| `ui_guardrails:feed_ramp:mcp:install` | Adds the Feed Ramp MCP server to `.mcp.json` (Claude Code); `AGENT=cursor,gemini` or `all` for the others. See [MCP server](#mcp-server). |
 | `ui_guardrails:feed_ramp:rules` | Writes the manifest, then a block pointing coding agents at it in `CLAUDE.md` and `AGENTS.md`, plus `.cursor/rules/ui-guardrails.mdc`. `TARGETS=` picks files, `CHECK=1` exits 1 when anything is out of date, `REMOVE=1` takes the blocks out. See [Feed Ramp](#feed-ramp). |
 
 Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
@@ -338,6 +339,26 @@ Pick them with `TARGETS=claude,agents,copilot` or `rules_targets:` in `guardrail
 The Cursor rule file is Feed Ramp's own and is rewritten whole. If a file at that path wasn't written by Feed Ramp, it's left alone and the run fails.
 
 When [agent hooks](#coding-agent-hooks) are installed, each new session also gets a one-line pointer to `COMPONENTS.md`.
+
+### MCP server
+
+`ui_guardrails-mcp` serves the manifest to coding agents as [MCP](https://modelcontextprotocol.io) tools over stdio:
+
+| Tool | Gives |
+| --- | --- |
+| `list_components` | every component in brief (kind, one-line description, params, slots), and the token names by category |
+| `get_component(name)` | one component's full entry: params with defaults, slots, previews, usage example. `Badge` finds `Admin::BadgeComponent` |
+| `search_components(query)` | components ranked by name, description, params, slots and preview labels |
+| `check_snippet(source, language?, path?)` | for ERB: the audit's and static a11y's findings, `component_match` included. For ERB and Ruby (Phlex): every `SomeComponent.new(...)` checked against the manifest (unknown component, keyword it doesn't take, required one missing, wrong positional count, and a likely typo a `**options` param would swallow) |
+
+```bash
+bundle exec rake ui_guardrails:feed_ramp:mcp:install              # .mcp.json (Claude Code)
+AGENT=all bundle exec rake ui_guardrails:feed_ramp:mcp:install    # + .cursor/mcp.json, .gemini/settings.json
+```
+
+The install keeps every other server and setting in those files and is safe to run again. It uses `bundle exec` when your Gemfile has the gem, and the bare executable otherwise. Cursor's entry passes `--root ${workspaceFolder}`, since Cursor doesn't promise to start servers in the project. Claude Code asks you to approve a project server the first time.
+
+The server never boots the app. It builds the manifest from source when it starts and rebuilds it whenever a component, preview, view, stylesheet or `guardrails.yml` is added, removed or changed. If that changes the committed files it rewrites `.ui_guardrails/`, so `component_match` sees the same components. Pass `--no-write` (or `WRITE=0` for `rake ui_guardrails:feed_ramp:mcp`) to leave them alone. Once a project config starts the server, `ui_guardrails:feed_ramp:rules` mentions the tools in the agent rules block.
 
 ### Component match
 
