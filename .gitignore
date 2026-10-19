@@ -11,3 +11,6 @@ tmp/
 # Demo app generated artifacts
 examples/demo/app/assets/images/icons/sprite.svg
 examples/demo/doc/guardrails-suggestions-*.md
+
+# Fixture apps carry a lockfile on purpose (Feed Ramp reads library versions from it)
+!spec/fixtures/**/Gemfile.lock

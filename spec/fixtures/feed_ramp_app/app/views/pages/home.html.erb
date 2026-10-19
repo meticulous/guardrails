@@ -1,0 +1,9 @@
+<main>
+  <%= render CardComponent.new(title: "Welcome") do |card| %>
+    <% card.with_header(title: "Hello") %>
+    <p>Body</p>
+  <% end %>
+  <%= render Admin::BadgeComponent.new(count: 3) %>
+  <%= render Admin::BadgeComponent.new(count: 12, tone: :warning) %>
+  <% render ButtonComponent.new(label: "Not output") %>
+</main>

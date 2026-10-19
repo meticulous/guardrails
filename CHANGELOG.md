@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Feed Ramp component manifest.** `rake ui_guardrails:feed_ramp:manifest`
+  writes `.ui_guardrails/manifest.json` and `.ui_guardrails/COMPONENTS.md`
+  for coding agents. They list the app's ViewComponent and Phlex
+  components (class, file, template, constructor params with defaults,
+  slots, preview variants with Lookbook annotations, doc comment, and one
+  usage example copied from a preview or call site, never made up) and
+  its design tokens, including `:root` / `@theme` custom properties.
+  Built by parsing the source with Prism: no app boot, and none of
+  ViewComponent, Phlex or Lookbook needs to be installed. Output is
+  deterministic; `CHECK=1` exits 1 when it's out of date. Configured
+  under `feed_ramp:` in `guardrails.yml`.
+- `Tokens#strip_comments` is public.
+
 ### Changed
 
 - **Rake tasks are `ui_guardrails:*`, after the gem's name.**

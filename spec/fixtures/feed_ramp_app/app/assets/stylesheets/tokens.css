@@ -1,0 +1,10 @@
+/* --commented-out: 1px; */
+:root {
+  --color-brand: #000000;
+  --text-body: 1rem;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root { --surface: #111111; }
+}

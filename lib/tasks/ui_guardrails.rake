@@ -135,6 +135,29 @@ namespace :ui_guardrails do
     Guardrails::Tokens.new(root: root).run
   end
 
+  namespace :feed_ramp do
+    desc "Write the component manifest for coding agents: .ui_guardrails/manifest.json + COMPONENTS.md (CHECK=1 exits 1 when they're out of date, writing nothing)"
+    task :manifest do
+      require "guardrails/feed_ramp"
+      root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+      manifest = Guardrails::FeedRamp::Manifest.new(root: root)
+
+      if %w[1 true yes].include?(ENV["CHECK"]&.downcase)
+        abort "Feed Ramp manifest is out of date; run `rake ui_guardrails:feed_ramp:manifest` and commit the result." if manifest.stale?
+        puts "Feed Ramp manifest is up to date."
+        next
+      end
+
+      data = manifest.to_h
+      manifest.write.each do |path, status|
+        puts "#{status.to_s.capitalize}: #{path.relative_path_from(root)}"
+      end
+      libraries = data["libraries"].select { |_name, version| version }.map { |name, version| "#{name} #{version}" }
+      puts "#{data["components"].length} components, #{data["tokens"].length} tokens" \
+           "#{libraries.empty? ? "" : " (#{libraries.join(", ")})"}."
+    end
+  end
+
   namespace :hooks do
     desc "Add Guardrails to coding agents' hooks (AGENT=claude,codex,cursor,gemini or all; default claude)"
     task :install do

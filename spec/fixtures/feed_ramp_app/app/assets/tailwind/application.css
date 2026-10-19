@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #3355ff;
+  --spacing-gutter: 1.5rem;
+  --radius-card: 0.5rem;
+}
+
+.btn { padding: 0.5rem; --local-only: 1px; }

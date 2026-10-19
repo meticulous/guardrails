@@ -139,6 +139,14 @@ module Guardrails
         .find(&:exist?)
     end
 
+    # Replace CSS/SCSS comments with whitespace, preserving line/column
+    # positions so reported drift coordinates remain accurate.
+    def strip_comments(content)
+      content
+        .gsub(BLOCK_COMMENT_PATTERN) { |m| mask_chars(m) }
+        .gsub(LINE_COMMENT_PATTERN) { |m| " " * m.length }
+    end
+
     private
 
     def tailwind_uses_presets?(content)
@@ -199,14 +207,6 @@ module Guardrails
 
     def variable_definition_line?(line)
       line.match?(SCSS_VAR_PATTERN) || line.match?(CSS_VAR_PATTERN)
-    end
-
-    # Replace CSS/SCSS comments with whitespace, preserving line/column
-    # positions so reported drift coordinates remain accurate.
-    def strip_comments(content)
-      content
-        .gsub(BLOCK_COMMENT_PATTERN) { |m| mask_chars(m) }
-        .gsub(LINE_COMMENT_PATTERN) { |m| " " * m.length }
     end
 
     def mask_chars(string)

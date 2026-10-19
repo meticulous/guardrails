@@ -98,6 +98,7 @@ APPLY=1 bundle exec rake ui_guardrails:audit
 | `ui_guardrails:a11y:deep` | Reads axe-core JSON output and folds it into the unified report. Doesn't run axe itself (no Capybara / headless Chrome runtime deps) — point it at axe output your existing tooling produces. |
 | `ui_guardrails:visual:deep` | Consumes screenshot-diff tool output (snap_diff-capybara today; BackstopJS in flight, [#15](https://github.com/meticulous/guardrails/issues/15)) and reports visual regressions. Same parse-only design — your existing test toolchain runs screenshots; Guardrails reports. |
 | `ui_guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
+| `ui_guardrails:feed_ramp:manifest` | Writes `.ui_guardrails/manifest.json` and `COMPONENTS.md`: the app's components and tokens, for coding agents. `CHECK=1` exits 1 when they're out of date. See [Feed Ramp](#feed-ramp). |
 
 Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
 
@@ -292,6 +293,37 @@ The editor is `$GUARDRAILS_EDITOR`, then `$VISUAL`, then `$EDITOR`. VS Code-fami
 | `SIMILARITY_THRESHOLD=0.85` | Override the partial-similarity Jaccard threshold. |
 | `PATTERN_MIN_SIZE=8` / `PATTERN_MIN_OCCURRENCES=4` | Tune the cross-codebase pattern detector. |
 | `CLASSITIS_MIN_CLASSES=6` / `CLASSITIS_MIN_OCCURRENCES=4` | Tune the class-itis detector. |
+
+---
+
+## Feed Ramp
+
+The audit catches drift after it's written. Feed Ramp gives coding agents the app's real component library first, so they render the components you have instead of reinventing them.
+
+```bash
+bundle exec rake ui_guardrails:feed_ramp:manifest           # writes .ui_guardrails/manifest.json + COMPONENTS.md
+CHECK=1 bundle exec rake ui_guardrails:feed_ramp:manifest   # in CI: exit 1 if they're out of date
+```
+
+The manifest lists every ViewComponent and Phlex component: class, file, template, constructor params with their defaults, slots, the variants and states from its Lookbook / ViewComponent previews, its doc comment, and one usage example. It also lists the design tokens: everything `ui_guardrails:tokens` reads, plus custom properties in the `:root { }` and Tailwind v4 `@theme { }` blocks of your stylesheets.
+
+- **No app boot, network or model call.** Everything is read by parsing the source with Prism. Neither ViewComponent, Phlex nor Lookbook has to be installed: a class is a component when its superclass chain (through your own `ApplicationComponent` or `Components::Base`) reaches `ViewComponent::Base` or `Phlex::HTML`.
+- **Examples are copied, never written.** Each component's example is the shortest render of it in a visible preview, or else in a template or Ruby view, copied verbatim. A usage that names the component in full wins, since it works in any view. A component nothing renders gets no example.
+- **Deterministic.** Same source, byte-identical files: no timestamps, everything sorted. Commit both files so agents on a fresh clone have them and component API changes show up in review. `CHECK=1` rebuilds and compares, so it fails only when the committed files are actually wrong, not on every view edit.
+- **Phlex slots are a heuristic.** Phlex has no slot declarations, so public methods taking a block are listed instead and marked `heuristic`.
+
+Config in `guardrails.yml` (all optional; defaults shown):
+
+```yaml
+guardrails:
+  feed_ramp:
+    component_paths: [app/components, app/views/components]
+    preview_paths: [test/components/previews, spec/components/previews, lookbook/previews]
+    token_files: []          # extra files whose custom properties are all tokens
+    output_dir: .ui_guardrails
+```
+
+Lookbook's `preview_paths` live in Rails config, which Feed Ramp doesn't boot the app to read; add yours here if they aren't the defaults.
 
 ---
 
