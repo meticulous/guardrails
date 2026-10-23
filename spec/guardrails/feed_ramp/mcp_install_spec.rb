@@ -60,6 +60,56 @@ RSpec.describe Guardrails::FeedRamp::MCPInstall do
     expect(json(".mcp.json")["mcpServers"]).to include("keep" => { "command" => "y" })
   end
 
+  describe "Codex" do
+    it "adds a table to .codex/config.toml, keeping the rest of the file" do
+      write_file("Gemfile", %(gem "ui_guardrails"\n))
+      original = %(model = "gpt-5"\n\n[mcp_servers.docs]\ncommand = "docs-mcp"\n)
+      write_file(".codex/config.toml", original)
+
+      expect(described_class.new(root: @root, agents: %w[codex]).call.map(&:to_h))
+        .to eq([{ agent: "codex", path: ".codex/config.toml", changed: true }])
+      expect(@root.join(".codex/config.toml").read).to eq(
+        "#{original}\n[mcp_servers.ui_guardrails]\ncommand = \"bundle\"\nargs = [\"exec\", \"ui_guardrails-mcp\"]\n"
+      )
+      expect(described_class.new(root: @root, agents: %w[codex]).call.first.changed).to be false
+    end
+
+    it "replaces its own table and anything nested under it, in place" do
+      write_file(".codex/config.toml", <<~TOML)
+        [mcp_servers.ui_guardrails]
+        command = "old"
+        startup_timeout_sec = 5
+
+        [mcp_servers.ui_guardrails.env]
+        OLD = "1"
+
+        # The docs server
+        [mcp_servers.docs]
+        command = "docs-mcp"
+      TOML
+      described_class.new(root: @root, agents: %w[codex]).call
+
+      expect(@root.join(".codex/config.toml").read).to eq(<<~TOML)
+        [mcp_servers.ui_guardrails]
+        command = "ui_guardrails-mcp"
+        args = []
+
+        # The docs server
+        [mcp_servers.docs]
+        command = "docs-mcp"
+      TOML
+    end
+
+    it "creates the file, and refuses one that sets the server up some other way" do
+      described_class.new(root: @root, agents: %w[codex]).call
+      expect(@root.join(".codex/config.toml").read).to eq(%([mcp_servers.ui_guardrails]\ncommand = "ui_guardrails-mcp"\nargs = []\n))
+
+      write_file(".codex/config.toml", %([mcp_servers]\nui_guardrails = { command = "x" }\n))
+      expect { described_class.new(root: @root, agents: %w[codex]).call }
+        .to raise_error(Guardrails::Error, /\.codex\/config\.toml sets up ui_guardrails in a form this task can't edit/)
+    end
+  end
+
   it "refuses invalid JSON and unknown agents" do
     write_file(".mcp.json", "{ nope")
     expect { described_class.new(root: @root).call }.to raise_error(Guardrails::Error, /\.mcp\.json isn't valid JSON/)

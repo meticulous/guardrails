@@ -37,7 +37,7 @@ module Guardrails
       AGENTS_IMPORT = %r{(?:\A|\s)@(?:\./)?AGENTS\.md\b}
 
       # Project configs that can start the Feed Ramp MCP server.
-      MCP_CONFIGS = %w[.mcp.json .cursor/mcp.json .gemini/settings.json].freeze
+      MCP_CONFIGS = %w[.mcp.json .codex/config.toml .cursor/mcp.json .gemini/settings.json].freeze
 
       COMPONENT_INDEX_LIMIT = 50
       TOKEN_EXAMPLES = 3

@@ -240,7 +240,7 @@ namespace :ui_guardrails do
     end
 
     namespace :mcp do
-      desc "Add the Feed Ramp MCP server to coding agents' project config (AGENT=claude,cursor,gemini or all; default claude)"
+      desc "Add the Feed Ramp MCP server to coding agents' project config (AGENT=claude,codex,cursor,gemini or all; default claude)"
       task :install do
         require "guardrails/feed_ramp/mcp_install"
         root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
@@ -257,6 +257,7 @@ namespace :ui_guardrails do
           puts "#{change.changed ? "Added the ui_guardrails MCP server to" : "Already set up:"} #{change.path} (#{change.agent})"
         end
         puts "Claude Code asks you to approve project MCP servers the first time it starts them." if agents.include?("claude")
+        puts "Codex reads .codex/config.toml only in projects you've marked as trusted." if agents.include?("codex")
       end
     end
   end

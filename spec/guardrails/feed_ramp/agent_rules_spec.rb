@@ -58,6 +58,10 @@ RSpec.describe Guardrails::FeedRamp::AgentRules do
       expect(rules.block).not_to include("check_snippet")
       write_file(".mcp.json", %({"mcpServers": {"ui_guardrails": {"command": "ui_guardrails-mcp"}}}))
       expect(rules.block).to include("`search_components`", "`check_snippet`")
+
+      @root.join(".mcp.json").delete
+      write_file(".codex/config.toml", %([mcp_servers.ui_guardrails]\ncommand = "ui_guardrails-mcp"\n))
+      expect(rules.block).to include("`check_snippet`")
     end
 
     it "caps the component list and says where the rest are" do
