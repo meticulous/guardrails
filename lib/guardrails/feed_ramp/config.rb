@@ -19,9 +19,10 @@ module Guardrails
     #           min_classes: 3      # a component's root needs this many static classes to be matched
     #           coverage: 0.8       # share of those classes hand-written markup must carry
     #
-    # Lookbook's own `preview_paths` live in Rails config, which Feed Ramp
-    # can't read without booting the app; list them here when they aren't
-    # one of the defaults.
+    # Preview directories the app adds in config/application.rb or
+    # config/environments (`config.view_component.previews.paths << …`,
+    # `config.lookbook.preview_paths`) are found too, when they're written
+    # as literals; list any others here.
     class Config
       DEFAULT_COMPONENT_PATHS = %w[app/components app/views/components].freeze
       DEFAULT_PREVIEW_PATHS = %w[test/components/previews spec/components/previews lookbook/previews].freeze
@@ -56,6 +57,13 @@ module Guardrails
         @output_dir = output_dir.to_s
         @rules_targets = Array(rules_targets).map(&:to_s)
         @component_match = parse_component_match(component_match)
+      end
+
+      # `preview_paths` plus the ones the app's Rails config adds. Read on
+      # demand, so loading the config stays cheap for the hooks.
+      def all_preview_paths(root)
+        require_relative "rails_config"
+        (@preview_paths + RailsConfig.preview_paths(root)).uniq
       end
 
       def manifest_path(root)

@@ -5,6 +5,7 @@ require "pathname"
 require_relative "../version"
 require_relative "../tokens"
 require_relative "manifest"
+require_relative "rails_config"
 require_relative "snippet_check"
 
 module Guardrails
@@ -18,7 +19,7 @@ module Guardrails
       # components the tools offer.
       class Library
         WATCHED_DIRS = %w[app/views app/assets/stylesheets app/assets/tailwind].freeze
-        WATCHED_FILES = %w[guardrails.yml Gemfile.lock tailwind.config.js config/tailwind.config.js].freeze
+        WATCHED_FILES = (%w[guardrails.yml Gemfile.lock tailwind.config.js config/tailwind.config.js] + RailsConfig::FILES).freeze
         SEARCH_LIMIT = 10
 
         attr_reader :root
@@ -90,7 +91,7 @@ module Guardrails
         # deleted or edited one changes it.
         def fingerprint
           config = Config.load(@root)
-          dirs = (config.component_paths + config.preview_paths + WATCHED_DIRS).uniq
+          dirs = (config.component_paths + config.all_preview_paths(@root) + WATCHED_DIRS).uniq
           files = dirs.flat_map { |dir| Dir.glob(@root.join(dir, "**/*").to_s) } +
                   (WATCHED_FILES + config.token_files).map { |file| @root.join(file).to_s }
           files.uniq.sort.filter_map { |file| [file, File.mtime(file).to_f] if File.file?(file) }.hash

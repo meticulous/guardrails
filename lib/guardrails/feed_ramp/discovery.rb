@@ -34,13 +34,14 @@ module Guardrails
       # `methods` are the preview's public instance methods, in order.
       Preview = Struct.new(:info, :component, :methods, keyword_init: true)
 
-      attr_reader :index
+      attr_reader :index, :preview_paths
 
       def initialize(root:, config:)
         @root = Pathname(root)
         @config = config
+        @preview_paths = config.all_preview_paths(@root)
         @component_sources = ruby_sources(config.component_paths)
-        @preview_sources = ruby_sources(config.preview_paths)
+        @preview_sources = ruby_sources(@preview_paths)
         @index = ClassIndex.new(@component_sources + @preview_sources)
       end
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "feed_ramp/manifest"
+require_relative "feed_ramp/rails_config"
 require_relative "feed_ramp/agent_rules"
 require_relative "feed_ramp/score"
 

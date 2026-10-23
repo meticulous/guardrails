@@ -66,7 +66,7 @@ module Guardrails
 
       def ignored?(file)
         segments = file.split("/")
-        (Audit::IMPLICIT_IGNORE & segments).any? || @config.preview_paths.any? { |path| file.start_with?("#{path}/") }
+        (Audit::IMPLICIT_IGNORE & segments).any? || @discovery.preview_paths.any? { |path| file.start_with?("#{path}/") }
       end
 
       # `render X.new(...)` calls under `node`, with constants resolved
