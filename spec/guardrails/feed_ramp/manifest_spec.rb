@@ -188,6 +188,39 @@ RSpec.describe Guardrails::FeedRamp::Manifest do
       expect(described_class.new(root: root).to_h["components"].map { |c| c["name"] }).to eq(["ButtonComponent"])
     end
 
+    it "takes a Phlex kit call as an example, by short name only when one component has it" do
+      write "app/views/components/base.rb", "module Components\n  extend Phlex::Kit\n  class Base < Phlex::HTML\n  end\nend\n"
+      write "app/views/components/alert.rb", <<~RUBY
+        module Components
+          class Alert < Base
+            def initialize(tone: :info) = nil
+            def view_template(&) = div(class: "alert", &)
+          end
+        end
+      RUBY
+      write "app/views/components/badge.rb", "module Components\n  class Badge < Base\n    def view_template = span\n  end\nend\n"
+      write "app/views/components/marketing/badge.rb", "module Marketing\n  class Badge < Phlex::HTML\n    def view_template = span\n  end\nend\n"
+      write "app/views/pages/index_view.rb", <<~RUBY
+        class Views::Pages::IndexView < Phlex::HTML
+          include Components
+
+          def view_template
+            Alert(tone: :success) { "Saved" }
+            Badge()
+            Integer("3")
+          end
+        end
+      RUBY
+      write "app/views/pages/show_view.rb", %(class ShowView < Phlex::HTML\n  def view_template = Marketing::Badge()\nend\n)
+
+      examples = described_class.new(root: root).to_h["components"].to_h { |c| [c["name"], c["example"]&.values_at("source", "file")] }
+      expect(examples).to eq(
+        "Components::Alert" => [%(Alert(tone: :success) { "Saved" }), "app/views/pages/index_view.rb"],
+        "Components::Badge" => nil, # `Badge()` could be either
+        "Marketing::Badge" => ["Marketing::Badge()", "app/views/pages/show_view.rb"]
+      )
+    end
+
     it "skips files that don't parse cleanly without failing" do
       write "app/components/broken_component.rb", "class BrokenComponent < ViewComponent::Base\n  def call(\nend\n"
       write "app/components/ok_component.rb", "class OkComponent < ViewComponent::Base\n  def call; end\nend\n"

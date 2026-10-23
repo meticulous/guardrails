@@ -9,7 +9,8 @@ require_relative "ruby_source"
 module Guardrails
   module FeedRamp
     # Where the app renders its components: `render XComponent.new(...)`
-    # in previews, templates and Ruby views. Each component's example in
+    # in previews, templates and Ruby views, and Phlex kit calls
+    # (`Alert(tone: :warning)`, `Components::Alert(...)`) in Ruby views. Each component's example in
     # the manifest is one of these, copied from the source; nothing is
     # ever written for it.
     class Usages
@@ -28,6 +29,9 @@ module Guardrails
         @config = config
         @discovery = discovery
         @names = discovery.components.to_set(&:name)
+        phlex = discovery.components.select { |c| c.kind == "phlex" }
+        @phlex_names = phlex.to_set(&:name)
+        @phlex_by_short_name = phlex.group_by { |c| c.name.split("::").last }
       end
 
       # Templates and Ruby views searched for call sites.
@@ -74,7 +78,8 @@ module Guardrails
       def ruby_renders(node, scopes, file, from)
         found = []
         walk(node, scopes) do |call, current_scopes|
-          name, written = rendered_component(call) { |constant| @discovery.index.resolve(constant, current_scopes) }
+          resolve = ->(constant) { @discovery.index.resolve(constant, current_scopes) }
+          name, written = rendered_component(call, &resolve) || kit_component(call, &resolve)
           next unless name
 
           found << Usage.new(component: name, source: RubySource.excerpt(call), file: file, line: call.location.start_line,
@@ -118,6 +123,26 @@ module Guardrails
         written = RubySource.constant_name(built.receiver)
         name = written && yield(written)
         [name, written] if @names.include?(name)
+      end
+
+      # [component, name as written] for a Phlex kit call: `Alert(...)`
+      # in a view that includes the kit, or `Components::Alert(...)`.
+      # A bare name is the one Phlex component with that name.
+      def kit_component(call)
+        return nil unless call.name.match?(/\A[A-Z]/)
+
+        if call.receiver
+          namespace = RubySource.constant_name(call.receiver)
+          return nil unless namespace
+
+          written = "#{namespace}::#{call.name}"
+          name = yield(written)
+        else
+          written = call.name.to_s
+          candidates = @phlex_by_short_name.fetch(written, [])
+          name = candidates.first.name if candidates.length == 1
+        end
+        [name, written] if @phlex_names.include?(name)
       end
 
       def walk(node, scopes, &block)

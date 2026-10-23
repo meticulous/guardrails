@@ -34,6 +34,17 @@ RSpec.describe Guardrails::FeedRamp::SnippetCheck do
     expect(check.call(source)["findings"].first["fix"]).to eq("Did you mean `title:`? It takes (title: nil).")
   end
 
+  it "checks Phlex kit calls, and leaves other capitalised calls alone" do
+    source = <<~RUBY
+      def view_template
+        Alert(tone: :warning, dismisable: true) { "x" }
+        Components::Alert(tone: :info)
+        Integer("3")
+      end
+    RUBY
+    expect(findings(source)).to eq([["unknown_param", "error", 2, "Components::Alert() doesn't take `dismisable:`."]])
+  end
+
   it "names the nearest components for one that doesn't exist" do
     result = check.call("render ButonComponent.new(label: 'x')")["findings"].first
     expect(result).to include("rule" => "unknown_component", "message" => "ButonComponent isn't one of this app's components.")

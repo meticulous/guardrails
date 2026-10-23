@@ -83,15 +83,31 @@ module Guardrails
 
         findings = []
         each_node(tree.value) do |node|
-          next unless node.is_a?(Prism::CallNode) && node.name == :new && constant?(node.receiver)
+          next unless node.is_a?(Prism::CallNode)
 
-          findings.concat(check_call(node, first_line + node.location.start_line - 1))
+          line = first_line + node.location.start_line - 1
+          if node.name == :new && constant?(node.receiver)
+            findings.concat(check_call(node, line, RubySource.constant_name(node.receiver)))
+          elsif (written = kit_call(node))
+            findings.concat(check_call(node, line, written, kit: true))
+          end
         end
         findings
       end
 
-      def check_call(call, line)
-        written = RubySource.constant_name(call.receiver)
+      # `Alert(...)` or `Components::Alert(...)`, written as it names a
+      # Phlex component; nil for any other call.
+      def kit_call(call)
+        return nil unless call.name.match?(/\A[A-Z]/)
+
+        namespace = call.receiver && RubySource.constant_name(call.receiver)
+        return nil if call.receiver && !namespace
+
+        written = [namespace, call.name].compact.join("::")
+        written if resolve(written)&.fetch("kind", nil) == "phlex"
+      end
+
+      def check_call(call, line, written, kit: false)
         return [] unless written
 
         component = resolve(written)
@@ -110,7 +126,7 @@ module Guardrails
         positional = hash ? args[0...-1] : args
         return [] if args.any? { |arg| arg.is_a?(Prism::SplatNode) } || hash&.elements&.any?(Prism::AssocSplatNode)
 
-        name = component["name"]
+        name = kit ? "#{component["name"]}()" : "#{component["name"]}.new"
         keywords = hash ? hash.elements.filter_map { |el| el.key.unescaped if el.key.is_a?(Prism::SymbolNode) } : []
         findings = []
         known = params.select { |p| p["kind"] == "keyword" }.map { |p| p["name"] }
@@ -118,28 +134,28 @@ module Guardrails
         (keywords - known).each do |keyword|
           near = known.find { |k| distance(k, keyword) <= 2 && !keywords.include?(k) }
           if keyrest.nil?
-            findings << finding("unknown_param", line, "#{name}.new doesn't take `#{keyword}:`.",
+            findings << finding("unknown_param", line, "#{name} doesn't take `#{keyword}:`.",
                                 near ? "Did you mean `#{near}:`? It takes #{signature(params)}." : "It takes #{signature(params)}.")
           elsif near
             # Taken by **options, but most likely a typo.
-            findings << finding("unknown_param", line, "`#{keyword}:` goes into #{name}'s **#{keyrest["name"]}, not a param.",
+            findings << finding("unknown_param", line, "`#{keyword}:` goes into #{component["name"]}'s **#{keyrest["name"]}, not a param.",
                                 "Did you mean `#{near}:`? It takes #{signature(params)}.").merge("severity" => "warning")
           end
         end
         params.select { |p| p["kind"] == "keyword" && p["required"] && !keywords.include?(p["name"]) }.each do |param|
-          findings << finding("missing_param", line, "#{name}.new needs `#{param["name"]}:`.", "It takes #{signature(params)}.")
+          findings << finding("missing_param", line, "#{name} needs `#{param["name"]}:`.", "It takes #{signature(params)}.")
         end
         positional_params = params.select { |p| p["kind"] == "positional" }
         required = positional_params.count { |p| p["required"] }
         unless params.any? { |p| p["kind"] == "rest" }
           if positional.length > positional_params.length
-            findings << finding("wrong_arguments", line, "#{name}.new takes #{positional_params.length} positional " \
+            findings << finding("wrong_arguments", line, "#{name} takes #{positional_params.length} positional " \
                                                          "argument#{"s" unless positional_params.length == 1}, " \
                                                          "not #{positional.length}.", "It takes #{signature(params)}.")
           end
         end
         if positional.length < required
-          findings << finding("wrong_arguments", line, "#{name}.new needs #{required} positional argument" \
+          findings << finding("wrong_arguments", line, "#{name} needs #{required} positional argument" \
                                                        "#{"s" unless required == 1}, not #{positional.length}.",
                               "It takes #{signature(params)}.")
         end
