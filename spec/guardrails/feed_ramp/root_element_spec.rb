@@ -111,6 +111,38 @@ RSpec.describe Guardrails::FeedRamp::RootElement do
     expect(root_of("ButtonComponent")).to eq("tag" => nil, "classes" => ["button"])
   end
 
+  it "follows a class method that takes arguments, through a helper building the attributes" do
+    write_file("app/components/button_component.rb", <<~RUBY)
+      class ButtonComponent < ApplicationComponent
+        private
+
+        def css_classes(*additional)
+          build_css('button', (@size == :default ? nil : "button-\#{@size}"), *additional, extra: @extra)
+        end
+
+        def link_attributes
+          compact_attributes(class: css_classes(('disabled' if @disabled)), data: @data)
+        end
+
+        def button_to_attributes
+          compact_attributes(method: @method, class: css_classes, form_class: @form_class)
+        end
+
+        def compact_attributes(attributes)
+          attributes.compact
+        end
+      end
+    RUBY
+    write_file("app/components/button_component.html.erb", <<~ERB)
+      <% if form_button? %>
+        <%= button_to @href, **button_to_attributes do %><%= label_content %><% end %>
+      <% elsif link? %>
+        <%= tag.a(label_content, **link_attributes) %>
+      <% end %>
+    ERB
+    expect(root_of("ButtonComponent")).to eq("tag" => "button", "classes" => ["button"])
+  end
+
   it "takes a `content_tag(@tag, …)` tag from the initialize default" do
     write_file("app/components/section_label_component.rb", <<~RUBY)
       class SectionLabelComponent < ApplicationComponent

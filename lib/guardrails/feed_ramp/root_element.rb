@@ -255,8 +255,9 @@ module Guardrails
       end
 
       def call_hash_classes(call, depth)
-        if (method = own_method(call))
-          return method_hash_classes(method, depth + 1)
+        if (method = defined_method(call))
+          found = method_hash_classes(method, depth + 1)
+          return found if found || call.arguments.nil?
         end
         if call.receiver && (HASH_MERGES.include?(call.name) || PASS_THROUGH.include?(call.name))
           from_args = HASH_MERGES.include?(call.name) ? call_classes(call, depth) : []
@@ -294,8 +295,10 @@ module Guardrails
       end
 
       def call_class_tokens(call, depth)
-        if (method = own_method(call))
-          class_tokens(last_expression(method), depth + 1)
+        method = defined_method(call)
+        found = method ? class_tokens(last_expression(method), depth + 1) : []
+        if found.any? || (method && call.arguments.nil?)
+          found
         elsif call.receiver && PASS_THROUGH.include?(call.name)
           class_tokens(call.receiver, depth)
         elsif call.receiver.nil?
@@ -315,6 +318,13 @@ module Guardrails
           else []
           end
         end.uniq.sort
+      end
+
+      # A receiver-less call to a method the component (or an ancestor in
+      # the app) defines, whatever its arguments: the strings in its body
+      # are there however it's called (`css_classes(*additional)`).
+      def defined_method(call)
+        @defs[call.name] if call.receiver.nil? && call.block.nil?
       end
 
       # A receiver-less, argument-less call to a method the component (or
