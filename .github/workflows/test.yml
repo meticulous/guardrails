@@ -27,9 +27,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.4 is the gemspec floor (required_ruby_version >= 3.4.0);
-        # 4.0 is the current stable line.
-        ruby: ["3.4", "4.0"]
+        # Exact patch releases, so a runner never picks up a version with
+        # a known CVE: 3.4.12 on the gemspec's 3.4 line, 4.0.9 on the
+        # current stable line. Keep .ruby-version and release.yml in step.
+        ruby: ["3.4.12", "4.0.9"]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
