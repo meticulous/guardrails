@@ -266,17 +266,18 @@ module Guardrails
       results
     end
 
-    # The component its markup matches best: the same tag, and either
-    # most of a long-enough class list, or its signature class.
+    # The component its markup matches best: its signature class on any
+    # tag (a component may render a link or a button), or the same tag
+    # with most of a long-enough class list.
     def best_component_match(tag, classes, path)
       settings = component_match_settings
       scored = matchable_components.filter_map do |component|
         root = component["root_element"]
-        next if root["tag"] != tag || component["template"] == path
+        next if component["template"] == path
 
         wanted = root["classes"]
         coverage = (classes & wanted).length.fdiv(wanted.length)
-        by_classes = wanted.length >= settings.min_classes && coverage >= settings.coverage
+        by_classes = root["tag"] == tag && wanted.length >= settings.min_classes && coverage >= settings.coverage
         by_signature = classes.include?(signature_class(component))
         [component, coverage, wanted.length] if by_classes || by_signature
       end

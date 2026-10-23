@@ -102,7 +102,7 @@ module Guardrails
           "line" => component.info.line,
           "template" => component.template,
           "superclass" => discovery.index.superclass_of(component.info),
-          "root_element" => RootElement.for(component, @root),
+          "root_element" => RootElement.for(component, @root, index: discovery.index),
           "description" => doc.text.empty? ? nil : doc.text,
           "params" => discovery.params(component),
           "slots" => discovery.slots(component),

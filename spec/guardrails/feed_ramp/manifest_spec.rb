@@ -45,7 +45,7 @@ RSpec.describe Guardrails::FeedRamp::Manifest do
         "ButtonComponent" => { "tag" => "button", "classes" => ["btn"] },       # not `btn--<%= @variant %>`
         "CardComponent" => { "tag" => "section", "classes" => ["card"] },
         "Components::Alert" => { "tag" => "div", "classes" => ["alert"] },      # not `alert--#{@tone}`
-        "IconComponent" => nil,
+        "IconComponent" => { "tag" => "svg", "classes" => [] },                # tag.svg with no class:
         "TooltipComponent" => { "tag" => "span", "classes" => [] }
       )
     end

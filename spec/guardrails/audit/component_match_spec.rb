@@ -79,6 +79,13 @@ RSpec.describe "Audit component_match" do
       expect(matches.map { |v| [v.file, v.value] }).to eq([["app/views/pages/a.html.erb", "PanelComponent"]])
     end
 
+    it "matches a signature class on any tag, but a class list only on the component's tag" do
+      write_file("app/views/pages/a.html.erb", %(<a href="/x" class="button">Go</a>\n))
+      write_file("app/views/pages/b.html.erb", %(<span class="flex items-center gap-2 rounded-lg border">x</span>\n))
+
+      expect(matches.map { |v| [v.file, v.value] }).to eq([["app/views/pages/a.html.erb", "ButtonComponent"]])
+    end
+
     it "doesn't match a component's own template, or a short generic class list" do
       write_file("app/components/chip_component.rb", "class ChipComponent < ViewComponent::Base\nend\n")
       write_file("app/components/chip_component.html.erb", %(<span class="px-2 rounded">x</span>\n))
