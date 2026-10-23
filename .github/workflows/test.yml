@@ -29,7 +29,8 @@ jobs:
       matrix:
         # Exact patch releases, so a runner never picks up a version with
         # a known CVE: 3.4.12 on the gemspec's 3.4 line, 4.0.9 on the
-        # current stable line. Keep .ruby-version and release.yml in step.
+        # current stable line. Keep .ruby-version, .tool-versions and
+        # release.yml in step.
         ruby: ["3.4.12", "4.0.9"]
 
     steps:

@@ -78,7 +78,7 @@ bundle add ui_guardrails --group "development, test"
 bundle exec rake ui_guardrails:feed_ramp:rules
 
 # 2. Optional: the MCP server (search_components, get_component, check_snippet)
-bundle exec rake ui_guardrails:feed_ramp:mcp:install        # AGENT=all adds Cursor and Gemini CLI
+bundle exec rake ui_guardrails:feed_ramp:mcp:install        # AGENT=all adds Codex, Cursor and Gemini CLI
 
 # 3. Commit it, so every clone and every agent session has it
 #    (and .mcp.json if you ran step 2)
@@ -132,7 +132,7 @@ APPLY=1 bundle exec rake ui_guardrails:audit
 | `ui_guardrails:hooks:install` | Adds Guardrails to coding agents' hooks (Claude Code, Codex, Cursor, Gemini CLI), so drift an agent introduces goes back to it while it works. See [Coding agent hooks](#coding-agent-hooks). |
 | `ui_guardrails:feed_ramp:manifest` | Writes `.ui_guardrails/manifest.json` and `COMPONENTS.md`: the app's components and tokens, for coding agents. `CHECK=1` exits 1 when they're out of date. See [Feed Ramp](#feed-ramp). |
 | `ui_guardrails:feed_ramp:score` | Scores UI drift per 100 templates (hardcoded values, reinvented components, a11y) and saves it under `.ui_guardrails/scores/`. `BASELINE=last` or a path compares two runs; `FORMAT=json`. Never fails. See [Drift score](#drift-score). |
-| `ui_guardrails:feed_ramp:mcp:install` | Adds the Feed Ramp MCP server to `.mcp.json` (Claude Code); `AGENT=cursor,gemini` or `all` for the others. See [MCP server](#mcp-server). |
+| `ui_guardrails:feed_ramp:mcp:install` | Adds the Feed Ramp MCP server to `.mcp.json` (Claude Code); `AGENT=codex,cursor,gemini` or `all` for the others. See [MCP server](#mcp-server). |
 | `ui_guardrails:feed_ramp:rules` | Writes the manifest, then a block pointing coding agents at it in `CLAUDE.md` and `AGENTS.md`, plus `.cursor/rules/ui-guardrails.mdc`. `TARGETS=` picks files, `CHECK=1` exits 1 when anything is out of date, `REMOVE=1` takes the blocks out. See [Feed Ramp](#feed-ramp). |
 
 Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
@@ -151,7 +151,7 @@ Static AST walk over every `.html.erb` under `app/views/` and `app/components/` 
 | `raw_color` | Hex / rgb literals in color-bearing attributes (`fill`, `stroke`, `color`, `bgcolor`, `background`, `data-*color*`, etc.). |
 | `tailwind_arbitrary` | `bg-[#fa3]`, `text-[14px]`, `p-[7px]` — arbitrary values that bypass the theme. |
 | `helper_recommended` | `<button>` / `<a>` wrapping `<%= … %>` ERB output. Suggests `tag.button` / `link_to` / `button_to` for clean accessible names. Skips elements that already have `aria-label`. |
-| `component_match` | Hand-written markup copying one of your components: the same root tag plus its signature class (`class="button …"` for ButtonComponent) or most of its classes. Suggests the component's real usage example. Needs a [Feed Ramp](#component-match) manifest; warning by default. |
+| `component_match` | Hand-written markup copying one of your components: its signature class (`class="button …"` for ButtonComponent) on any tag, or its root tag with most of its classes. Suggests the component's real usage example. Needs a [Feed Ramp](#component-match) manifest; warning by default. |
 | `image_alt` / `button_name` / `link_name` / `input_label` | The four most common static a11y misses (see [`doc/A11Y.md`](doc/A11Y.md)). |
 
 ### Suggest mode and auto-fix
@@ -345,7 +345,7 @@ bundle exec rake ui_guardrails:feed_ramp:manifest        # just .ui_guardrails/m
 The manifest lists every ViewComponent and Phlex component: class, file, template, constructor params with their defaults, slots, the variants and states from its Lookbook / ViewComponent previews, its doc comment, and one usage example. It also lists the design tokens: everything `ui_guardrails:tokens` reads, plus custom properties in the `:root { }` and Tailwind v4 `@theme { }` blocks of your stylesheets.
 
 - **No app boot, network or model call.** Everything is read by parsing the source with Prism. Neither ViewComponent, Phlex nor Lookbook has to be installed: a class is a component when its superclass chain (through your own `ApplicationComponent` or `Components::Base`) reaches `ViewComponent::Base` or `Phlex::HTML`.
-- **Examples are copied, never written.** Each component's example is the shortest render of it in a visible preview, or else in a template or Ruby view, copied verbatim. A usage that names the component in full wins, since it works in any view. A component nothing renders gets no example.
+- **Examples are copied, never written.** Each component's example is the shortest render of it (`render X.new(…)`, or a Phlex kit call like `Alert(…)`) in a visible preview, or else in a template or Ruby view, copied verbatim. A usage that names the component in full wins, since it works in any view. A component nothing renders gets no example.
 - **Deterministic.** Same source, byte-identical files: no timestamps, everything sorted. Commit both files so agents on a fresh clone have them and component API changes show up in review. `CHECK=1` rebuilds and compares, so it fails only when the committed files are actually wrong, not on every view edit.
 - **Phlex slots are a heuristic.** Phlex has no slot declarations, so public methods taking a block are listed instead and marked `heuristic`.
 
@@ -381,14 +381,14 @@ When [agent hooks](#coding-agent-hooks) are installed, each new session also get
 | `list_components` | every component in brief (kind, one-line description, params, slots), and the token names by category |
 | `get_component(name)` | one component's full entry: params with defaults, slots, previews, usage example. `Badge` finds `Admin::BadgeComponent` |
 | `search_components(query)` | components ranked by name, description, params, slots and preview labels |
-| `check_snippet(source, language?, path?)` | for ERB: the audit's and static a11y's findings, `component_match` included. For ERB and Ruby (Phlex): every `SomeComponent.new(...)` checked against the manifest (unknown component, keyword it doesn't take, required one missing, wrong positional count, and a likely typo a `**options` param would swallow) |
+| `check_snippet(source, language?, path?)` | for ERB: the audit's and static a11y's findings, `component_match` included. For ERB and Ruby (Phlex): every `SomeComponent.new(...)` and Phlex kit call (`Alert(...)`) checked against the manifest (unknown component, keyword it doesn't take, required one missing, wrong positional count, and a likely typo a `**options` param would swallow) |
 
 ```bash
 bundle exec rake ui_guardrails:feed_ramp:mcp:install              # .mcp.json (Claude Code)
-AGENT=all bundle exec rake ui_guardrails:feed_ramp:mcp:install    # + .cursor/mcp.json, .gemini/settings.json
+AGENT=all bundle exec rake ui_guardrails:feed_ramp:mcp:install    # + .codex/config.toml, .cursor/mcp.json, .gemini/settings.json
 ```
 
-The install keeps every other server and setting in those files and is safe to run again. It uses `bundle exec` when your Gemfile has the gem, and the bare executable otherwise. Cursor's entry passes `--root ${workspaceFolder}`, since Cursor doesn't promise to start servers in the project. Claude Code asks you to approve a project server the first time.
+The install keeps every other server and setting in those files and is safe to run again. It uses `bundle exec` when your Gemfile has the gem, and the bare executable otherwise. Cursor's entry passes `--root ${workspaceFolder}`, since Cursor doesn't promise to start servers in the project. Claude Code asks you to approve a project server the first time, and Codex reads `.codex/config.toml` only in projects you've trusted. In that file the install owns the `[mcp_servers.ui_guardrails]` table and leaves every other line as it was.
 
 The server never boots the app. It builds the manifest from source when it starts and rebuilds it whenever a component, preview, view, stylesheet or `guardrails.yml` is added, removed or changed. If that changes the committed files it rewrites `.ui_guardrails/`, so `component_match` sees the same components. Pass `--no-write` (or `WRITE=0` for `rake ui_guardrails:feed_ramp:mcp`) to leave them alone. Once a project config starts the server, `ui_guardrails:feed_ramp:rules` mentions the tools in the agent rules block.
 
@@ -403,10 +403,12 @@ Once a manifest exists, `ui_guardrails:audit` (and so the agent hooks and the Lo
     app/views/welcome/broken.html.erb:42:1
 ```
 
-Each component's root element is read when the manifest is built: the first element of its ERB template, or the first tag its Phlex `view_template` (or ViewComponent `call`) builds. Its classes are the static ones only; `btn--<%= @variant %>` and `alert--#{@tone}` don't count. Markup matches when it has the same tag and either:
+Each component's root element is read when the manifest is built: the first element of its ERB template (or the first `<%= tag.div … %>` it opens with), or the first tag its Phlex `view_template` or ViewComponent `call` builds, following the component's own methods. Its classes are the ones it always has, read without rendering: literal strings, and the unconditional string arguments of a class helper (`class_names("kbd", "kbd--bare": @bare)` and `build_css("button", …)` give `kbd` and `button`), followed through methods such as `class: css_classes`, `**wrapper_attributes` or `attrs[:class] = …`. Conditional and interpolated classes (`btn--<%= @variant %>`, `alert--#{@tone}`) don't count. Markup matches with either:
 
-- **the component's signature class:** a root class named after the component (`button` or `button-component` for ButtonComponent, `icon-button` for IconButtonComponent), even on its own; or
-- **most of a long class list:** at least `coverage` (0.8) of the root's classes, when the root has at least `min_classes` (3). Shorter lists of generic utilities never match.
+- **the component's signature class, on any tag:** a root class named after the component (`button` or `button-component` for ButtonComponent, `icon-button` for IconButtonComponent), even on its own. Any tag, because a button component may render a link; or
+- **the same tag and most of a long class list:** at least `coverage` (0.8) of the root's classes, when the root has at least `min_classes` (3). Shorter lists of generic utilities never match.
+
+A component whose classes all depend on its arguments (a `class:` it's given, or one picked in an `if`) has nothing to match on.
 
 A component's own template is never matched against itself. The rule reads the committed manifest rather than parsing the app, so it adds nothing noticeable to a hook call, and it says nothing until `ui_guardrails:feed_ramp:manifest` has run.
 
@@ -467,7 +469,7 @@ guardrails:
     rules_targets: [claude, agents, cursor]   # also: gemini, copilot
 ```
 
-Lookbook's `preview_paths` live in Rails config, which Feed Ramp doesn't boot the app to read; add yours here if they aren't the defaults.
+Preview directories your Rails config adds are found too, without booting the app: `config.view_component.previews.paths << Rails.root.join("…").to_s` (or `preview_paths`, `+=`, `concat`) and `config.lookbook.preview_paths` in `config/application.rb` or `config/environments/{development,test}.rb`, written as strings or built from `Rails.root` or `__dir__`. List any computed at boot here.
 
 ---
 

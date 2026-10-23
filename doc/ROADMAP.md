@@ -148,11 +148,14 @@ The audit and the hooks catch drift after an agent has written it. Feed Ramp giv
 | Component manifest | ✅ shipped (2.0.0) | `ui_guardrails:feed_ramp:manifest` writes `.ui_guardrails/manifest.json` + `COMPONENTS.md` from ViewComponent and Phlex components, Lookbook / ViewComponent previews, call sites and tokens. Prism-parsed, deterministic, examples copied verbatim, never invented. `CHECK=1` compares content, so view edits don't make it stale. |
 | Agent rules | ✅ shipped (2.0.0) | Marker-delimited block in `CLAUDE.md` / `AGENTS.md` (+ opt-in `GEMINI.md`, Copilot), owned `.cursor/rules/ui-guardrails.mdc`. Idempotent; broken markers stop the run; `REMOVE=1`. |
 | Drift score | ✅ shipped (2.0.0) | `ui_guardrails:feed_ramp:score`: issues per 100 templates in three buckets, saved runs, `BASELINE=` deltas. Never fails. |
-| `component_match` | ✅ shipped (2.0.0) | Audit rule, silent without a manifest. Matches a component's root tag plus its signature class or ≥80% of a 3+ class list. Warning by default, configurable down to suggestion. |
+| `component_match` | ✅ shipped (2.0.0) | Audit rule, silent without a manifest. Matches a component's signature class on any tag, or its root tag with ≥80% of a 3+ class list. Warning by default, configurable down to suggestion. |
 | MCP server | ✅ shipped (2.0.0) | `ui_guardrails-mcp`: `list_components`, `get_component`, `search_components`, `check_snippet` (drift + component API checks). Hand-rolled JSON-RPC over stdio, no new dependency. |
-| Phlex kit calls as examples | not started | `Button(...)` / `render Components::Button.new` inside Phlex views aren't picked up as usage examples yet; only `Component.new` calls are. |
-| Lookbook `preview_paths` from Rails config | not started | Read without booting the app, or document a one-liner that writes them into `guardrails.yml`. |
-| `component_match` for `call`-only components with dynamic roots | not started | A component whose root classes are all dynamic has no fingerprint; a usage-derived fingerprint (what its renders produce in previews) would cover it, but needs rendering. |
+| Dynamic component roots | ✅ shipped (2.0.0) | Root classes built by helpers (`class_names`, `build_css`), attribute methods, `attrs[:class] =` and `tag.attributes(**…)` are read statically. Before this, `component_match` found nothing on three real ViewComponent apps. A signature class matches on any tag. |
+| Lookbook `preview_paths` from Rails config | ✅ shipped (2.0.0) | `config.view_component.previews.paths` / `preview_paths` / `config.lookbook.preview_paths` in `config/application.rb` and the development / test environments, read with Prism. Paths computed at boot still go in `guardrails.yml`. |
+| Phlex kit calls as examples | ✅ shipped (2.0.0) | `Alert(...)` and `Components::Alert(...)` are usage examples and are checked by `check_snippet`. |
+| Codex MCP config | ✅ shipped (2.0.0) | `AGENT=codex` writes `[mcp_servers.ui_guardrails]` to `.codex/config.toml` (trusted projects only). |
+| `component_match` for components with argument-dependent roots | not started | A root whose classes all come from arguments, or from an `if` with different classes per branch, has no fingerprint. Rendering the previews would give one, but that means booting the app. |
+| Composed roots | not started | A component whose root is another component (`render DialogComponent.new(class: "nav-drawer")`) gets no root element; following the inner component's root plus the extra class would cover it. |
 
 ---
 

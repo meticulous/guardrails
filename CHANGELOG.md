@@ -32,8 +32,10 @@ Nothing fails differently until you opt in, but check these:
 2. **`component_match` warnings can fail `ui_guardrails:audit`, once you
    commit a manifest.** Without `.ui_guardrails/manifest.json` the rule
    is silent. With one, markup copying a component is a warning, and
-   warnings fail the audit. To see what it catches without failing
-   builds, start at suggestion and raise it later:
+   warnings fail the audit. On an established app that can be hundreds
+   of findings (one ViewComponent app had 540, most of them a hand-written
+   form field wrapper). To see what it catches without failing builds,
+   start at suggestion and raise it later:
 
    ```yaml
    guardrails:
@@ -69,7 +71,11 @@ To start using Feed Ramp, see "Feed Ramp in 60 seconds" in the README.
   usage example copied from a preview or call site, never made up) and
   its design tokens, including `:root` / `@theme` custom properties.
   Built by parsing the source with Prism: no app boot, and none of
-  ViewComponent, Phlex or Lookbook needs to be installed. Output is
+  ViewComponent, Phlex or Lookbook needs to be installed. Preview
+  directories added in the app's Rails config
+  (`config.view_component.previews.paths`, `config.lookbook.preview_paths`)
+  are read from `config/application.rb` and the development / test
+  environments. Phlex kit calls count as usage examples. Output is
   deterministic; `CHECK=1` exits 1 when it's out of date. Configured
   under `feed_ramp:` in `guardrails.yml`.
 - **Feed Ramp agent rules.** `rake ui_guardrails:feed_ramp:rules` writes
@@ -86,19 +92,24 @@ To start using Feed Ramp, see "Feed Ramp in 60 seconds" in the README.
   `rake ui_guardrails:feed_ramp:mcp`) serves `list_components`,
   `get_component`, `search_components` and `check_snippet` over stdio.
   `check_snippet` runs the audit and static a11y over ERB and checks
-  every `Component.new(...)` in ERB or Ruby against the manifest:
+  every `Component.new(...)` and Phlex kit call (`Alert(...)`) in ERB or
+  Ruby against the manifest:
   unknown components, keywords they don't take, required ones missing,
   positional counts, likely typos. The server keeps the manifest fresh
   as files change and rewrites `.ui_guardrails/` when that changes it
   (`--no-write` to opt out). `rake ui_guardrails:feed_ramp:mcp:install`
-  adds it to `.mcp.json`, `.cursor/mcp.json` or `.gemini/settings.json`
-  (`AGENT=`), keeping everything else in them. The agent rules block
+  adds it to `.mcp.json`, `.codex/config.toml` (trusted projects),
+  `.cursor/mcp.json` or `.gemini/settings.json` (`AGENT=`), keeping
+  everything else in them. The agent rules block
   mentions the tools once a config starts the server.
 - **`component_match` audit rule.** Once a Feed Ramp manifest exists,
   `ui_guardrails:audit`, the agent hooks and the Lookbook panel flag
-  hand-written markup that copies a component: the same root tag plus
-  the component's signature class (`button` for ButtonComponent) or most
-  of a class list of three or more. The fix quotes the component's
+  hand-written markup that copies a component: the component's
+  signature class (`button` for ButtonComponent) on any tag, or its root
+  tag with most of a class list of three or more. Root classes are read
+  without rendering, through class helpers (`class_names`, `build_css`),
+  the component's attribute methods and `tag.attributes(**…)`; only the
+  ones a component always has count. The fix quotes the component's
   usage example. A warning by default; set
   `feed_ramp.component_match` to `suggestion` to report without
   failing, `error`, or `off`, and tune `min_classes` / `coverage`.
@@ -123,6 +134,10 @@ To start using Feed Ramp, see "Feed Ramp in 60 seconds" in the README.
 
 ### Changed
 
+- CI tests on Ruby 3.4.12 and 4.0.9, and releases build on 3.4.12, for
+  the CVE fixed in those releases; `.ruby-version` and `.tool-versions`
+  pin development to 3.4.12. The gem still installs on Ruby 3.4.0 and
+  later.
 - **Rake tasks are `ui_guardrails:*`, after the gem's name.**
   `rake ui_guardrails:audit`, `ui_guardrails:init`, `ui_guardrails:hooks:install`
   and the rest. The `guardrails:*` names still work until 3.0: each runs
