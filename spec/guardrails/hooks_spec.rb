@@ -19,7 +19,7 @@ RSpec.describe Guardrails::Hooks do
   end
 
   def git(*args)
-    _out, err, status = Open3.capture3("git", "-c", "user.email=t@example.com", "-c", "user.name=T", *args, chdir: @root.to_s)
+    _out, err, status = Open3.capture3("git", *GitHelper::QUIET_CONFIG, *args, chdir: @root.to_s)
     raise err unless status.success?
   end
 

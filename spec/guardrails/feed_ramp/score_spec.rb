@@ -94,7 +94,7 @@ RSpec.describe Guardrails::FeedRamp::Score do
       expect(score.to_h).to include("config_digest" => nil, "git" => nil)
 
       write_file("guardrails.yml", "guardrails: {}\n")
-      git = ->(*args) { Open3.capture3("git", "-c", "user.email=t@example.com", "-c", "user.name=T", *args, chdir: @root.to_s) }
+      git = ->(*args) { Open3.capture3("git", *GitHelper::QUIET_CONFIG, *args, chdir: @root.to_s) }
       git.call("init", "-q")
       git.call("add", ".")
       git.call("commit", "-qm", "init")
