@@ -14,6 +14,8 @@ module Guardrails
     #         token_files: [app/assets/stylesheets/tokens/_spacing.css]
     #         output_dir: .ui_guardrails
     #         rules_targets: [claude, agents, cursor]
+    #         modern_web_guidance: true   # mention the Modern Web Guidance skill in the agent rules;
+    #                                     # unset, they do when the skill is in the project
     #         component_match:
     #           severity: warning   # or suggestion (reports, never fails), error, off
     #           min_classes: 3      # a component's root needs this many static classes to be matched
@@ -37,12 +39,14 @@ module Guardrails
       SEVERITIES = { "error" => :error, "warning" => :warning, "suggestion" => :suggestion, "off" => nil }.freeze
       DEFAULT_COMPONENT_MATCH = { "severity" => "warning", "min_classes" => 3, "coverage" => 0.8 }.freeze
 
-      attr_reader :component_paths, :preview_paths, :token_files, :output_dir, :rules_targets, :component_match
+      attr_reader :component_paths, :preview_paths, :token_files, :output_dir, :rules_targets, :component_match,
+                  :modern_web_guidance
 
       def self.load(root)
         path = Pathname(root).join("guardrails.yml")
         section = path.file? ? (YAML.safe_load_file(path) || {}).dig("guardrails", "feed_ramp") : nil
-        keys = %i[component_paths preview_paths token_files output_dir rules_targets component_match]
+        keys = %i[component_paths preview_paths token_files output_dir rules_targets component_match
+                  modern_web_guidance]
         new(**(section || {}).transform_keys(&:to_sym).slice(*keys))
       rescue Psych::Exception
         new
@@ -50,13 +54,14 @@ module Guardrails
 
       def initialize(component_paths: DEFAULT_COMPONENT_PATHS, preview_paths: DEFAULT_PREVIEW_PATHS,
                      token_files: [], output_dir: DEFAULT_OUTPUT_DIR, rules_targets: DEFAULT_RULES_TARGETS,
-                     component_match: {})
+                     component_match: {}, modern_web_guidance: nil)
         @component_paths = Array(component_paths).map(&:to_s)
         @preview_paths = Array(preview_paths).map(&:to_s)
         @token_files = Array(token_files).map(&:to_s)
         @output_dir = output_dir.to_s
         @rules_targets = Array(rules_targets).map(&:to_s)
         @component_match = parse_component_match(component_match)
+        @modern_web_guidance = parse_modern_web_guidance(modern_web_guidance)
       end
 
       # `preview_paths` plus the ones the app's Rails config adds. Read on
@@ -75,6 +80,13 @@ module Guardrails
       end
 
       private
+
+      # true, false, or nil to go by whether the skill is in the project.
+      def parse_modern_web_guidance(value)
+        return value if [true, false, nil].include?(value)
+
+        raise ArgumentError, "feed_ramp.modern_web_guidance #{value.inspect} in guardrails.yml isn't true or false"
+      end
 
       # `component_match: suggestion` is short for setting the severity.
       # A typo raises rather than quietly changing what fails the audit.

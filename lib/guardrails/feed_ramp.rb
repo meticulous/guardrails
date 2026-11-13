@@ -3,6 +3,7 @@
 require_relative "feed_ramp/manifest"
 require_relative "feed_ramp/rails_config"
 require_relative "feed_ramp/agent_rules"
+require_relative "feed_ramp/modern_web"
 require_relative "feed_ramp/score"
 
 module Guardrails
@@ -16,6 +17,8 @@ module Guardrails
   #     components, Lookbook previews, call sites and tokens.
   #   - AgentRules: a block in CLAUDE.md / AGENTS.md and a Cursor rule
   #     that point agents at the manifest.
+  #   - ModernWeb: installs the Modern Web Guidance skill (Google Chrome
+  #     and contributors) and has the rules mention it.
   #   - Score: a UI drift number for before/after comparisons.
   #   - MCP (`feed_ramp/mcp`, loaded on its own): the manifest as tools
   #     for coding agents, run by `ui_guardrails-mcp`.

@@ -260,6 +260,23 @@ namespace :ui_guardrails do
         puts "Codex reads .codex/config.toml only in projects you've marked as trusted." if agents.include?("codex")
       end
     end
+
+    namespace :modern_web do
+      desc "Install the Modern Web Guidance skill (by Google Chrome and contributors) with its own installer, " \
+           "`npx modern-web-guidance install`; ARGS=\"...\" are passed to it. Needs Node.js 22+"
+      task :install do
+        require "guardrails/feed_ramp/modern_web"
+        require "shellwords"
+        root = defined?(Rails) ? Rails.root : Pathname(Dir.pwd)
+
+        begin
+          installed = Guardrails::FeedRamp::ModernWeb::Install.new(root: root).call(Shellwords.split(ENV["ARGS"].to_s))
+        rescue Guardrails::Error => e
+          abort e.message
+        end
+        abort "The Modern Web Guidance install didn't finish." unless installed
+      end
+    end
   end
 
   namespace :hooks do

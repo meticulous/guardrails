@@ -3,6 +3,7 @@
 require "pathname"
 require_relative "../../guardrails"
 require_relative "config"
+require_relative "modern_web"
 
 module Guardrails
   module FeedRamp
@@ -52,18 +53,23 @@ module Guardrails
         new(root: manifest.root, manifest: manifest.to_h,
             manifest_path: manifest.path.relative_path_from(manifest.root),
             markdown_path: manifest.markdown_path.relative_path_from(manifest.root),
-            targets: targets || manifest.config.rules_targets, component_paths: manifest.config.component_paths)
+            targets: targets || manifest.config.rules_targets, component_paths: manifest.config.component_paths,
+            modern_web: manifest.config.modern_web_guidance)
       end
 
       # `manifest` is a Manifest's `to_h`; `manifest_path` and
       # `markdown_path` are where its files are, relative to root.
-      def initialize(root:, manifest:, manifest_path:, markdown_path:, targets: DEFAULT_TARGETS, component_paths: [])
+      # `modern_web` says whether to mention the Modern Web Guidance
+      # skill; nil goes by whether it's installed in the project.
+      def initialize(root:, manifest:, manifest_path:, markdown_path:, targets: DEFAULT_TARGETS, component_paths: [],
+                     modern_web: nil)
         @root = Pathname(root)
         @manifest = manifest
         @manifest_path = manifest_path.to_s
         @markdown_path = markdown_path.to_s
         @targets = Array(targets).map(&:to_s).uniq
         @component_paths = component_paths
+        @modern_web = modern_web
         unknown = @targets - TARGETS.keys
         raise Error, "Unknown agent rules target #{unknown.join(", ")}; expected #{TARGETS.keys.join(", ")}" if unknown.any?
       end
@@ -126,9 +132,26 @@ module Guardrails
           list << "- Use the design tokens listed in `#{@markdown_path}` instead of raw colours, " \
                   "pixel sizes or arbitrary Tailwind values."
         end
+        list << modern_web_instruction if modern_web?
         list << "- `rake ui_guardrails:audit` reports UI drift (raw colours, inline styles, missing alt text) " \
                 "in the views you changed."
         list
+      end
+
+      def modern_web?
+        @modern_web.nil? ? ModernWeb.installed?(@root) : @modern_web
+      end
+
+      # The app's own library comes first: a guide is for what no
+      # component covers, and for the inside of the components.
+      def modern_web_instruction
+        line = "- For HTML, CSS and client-side JavaScript the platform may already cover (dialogs, popovers, " \
+               "forms, layout, animation, performance), search the `#{ModernWeb::SKILL}` skill " \
+               "([#{ModernWeb::NAME}](#{ModernWeb::URL})) before writing it."
+        return line unless components.any? || tokens.any?
+
+        "#{line} This app's components and design tokens come first: follow a guide where none of them " \
+          "does the job, and inside the components themselves."
       end
 
       def mcp_installed?

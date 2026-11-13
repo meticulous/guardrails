@@ -102,6 +102,20 @@ To start using Feed Ramp, see "Feed Ramp in 60 seconds" in the README.
   `.cursor/mcp.json` or `.gemini/settings.json` (`AGENT=`), keeping
   everything else in them. The agent rules block
   mentions the tools once a config starts the server.
+- **Modern Web Guidance in Feed Ramp.**
+  `rake ui_guardrails:feed_ramp:modern_web:install` installs the
+  [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance)
+  skill, which has coding agents look up current web platform practice
+  before writing HTML, CSS or client-side JavaScript. It runs their
+  installer (`npx -y modern-web-guidance@latest install`, Node.js 22+;
+  `ARGS=` is passed through) after naming whose it is and the usage data
+  its CLI sends Google (`DISABLE_TELEMETRY=1` opts out). Nothing of it is
+  bundled. Once the skill is in a project skills directory, the agent
+  rules block tells agents to search it, after the app's own components
+  and tokens; `feed_ramp.modern_web_guidance: true` / `false` in
+  `guardrails.yml` overrides the detection. Modern Web Guidance is by
+  Google Chrome and its contributors, stewarded with the Microsoft Edge,
+  Mozilla Firefox and MDN teams (Apache-2.0; guides CC BY 4.0).
 - **`component_match` audit rule.** Once a Feed Ramp manifest exists,
   `ui_guardrails:audit`, the agent hooks and the Lookbook panel flag
   hand-written markup that copies a component: the component's

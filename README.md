@@ -80,16 +80,20 @@ bundle exec rake ui_guardrails:feed_ramp:rules
 # 2. Optional: the MCP server (search_components, get_component, check_snippet)
 bundle exec rake ui_guardrails:feed_ramp:mcp:install        # AGENT=all adds Codex, Cursor and Gemini CLI
 
-# 3. Commit it, so every clone and every agent session has it
-#    (and .mcp.json if you ran step 2)
+# 3. Optional: the Modern Web Guidance skill (Google Chrome and contributors), so
+#    agents also look up current HTML, CSS and JS practice. Run step 1 again after it
+bundle exec rake ui_guardrails:feed_ramp:modern_web:install
+
+# 4. Commit it, so every clone and every agent session has it
+#    (and .mcp.json if you ran step 2, the skill's files if you ran step 3)
 git add .ui_guardrails CLAUDE.md AGENTS.md .cursor/rules
 
-# 4. In CI: fail when the manifest or rules are out of date, and on drift,
+# 5. In CI: fail when the manifest or rules are out of date, and on drift,
 #    including hand-written markup that copies a component (component_match)
 CHECK=1 bundle exec rake ui_guardrails:feed_ramp:rules
 bundle exec rake ui_guardrails:audit
 
-# 5. Measure it: score now, again after an agent session, and compare
+# 6. Measure it: score now, again after an agent session, and compare
 bundle exec rake ui_guardrails:feed_ramp:score
 bundle exec rake ui_guardrails:feed_ramp:score BASELINE=last
 ```
@@ -133,6 +137,7 @@ APPLY=1 bundle exec rake ui_guardrails:audit
 | `ui_guardrails:feed_ramp:manifest` | Writes `.ui_guardrails/manifest.json` and `COMPONENTS.md`: the app's components and tokens, for coding agents. `CHECK=1` exits 1 when they're out of date. See [Feed Ramp](#feed-ramp). |
 | `ui_guardrails:feed_ramp:score` | Scores UI drift per 100 templates (hardcoded values, reinvented components, a11y) and saves it under `.ui_guardrails/scores/`. `BASELINE=last` or a path compares two runs; `FORMAT=json`. Never fails. See [Drift score](#drift-score). |
 | `ui_guardrails:feed_ramp:mcp:install` | Adds the Feed Ramp MCP server to `.mcp.json` (Claude Code); `AGENT=codex,cursor,gemini` or `all` for the others. See [MCP server](#mcp-server). |
+| `ui_guardrails:feed_ramp:modern_web:install` | Installs the [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance) skill with its own installer (needs Node.js 22+). The agent rules mention it once it's in the project. See [Modern Web Guidance](#modern-web-guidance). |
 | `ui_guardrails:feed_ramp:rules` | Writes the manifest, then a block pointing coding agents at it in `CLAUDE.md` and `AGENTS.md`, plus `.cursor/rules/ui-guardrails.mdc`. `TARGETS=` picks files, `CHECK=1` exits 1 when anything is out of date, `REMOVE=1` takes the blocks out. See [Feed Ramp](#feed-ramp). |
 
 Before 2.0 the tasks were `guardrails:*`. Those names still run the `ui_guardrails:` task, with a deprecation notice, until 3.0.
@@ -392,6 +397,22 @@ The install keeps every other server and setting in those files and is safe to r
 
 The server never boots the app. It builds the manifest from source when it starts and rebuilds it whenever a component, preview, view, stylesheet or `guardrails.yml` is added, removed or changed. If that changes the committed files it rewrites `.ui_guardrails/`, so `component_match` sees the same components. Pass `--no-write` (or `WRITE=0` for `rake ui_guardrails:feed_ramp:mcp`) to leave them alone. Once a project config starts the server, `ui_guardrails:feed_ramp:rules` mentions the tools in the agent rules block.
 
+### Modern Web Guidance
+
+Feed Ramp tells agents what your app already has. [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance) tells them what the web platform already has: a skill that has an agent look up current practice for dialogs, popovers, forms, layout, animation, performance and accessibility before it writes HTML, CSS or client-side JavaScript, instead of the older patterns in its training data.
+
+```bash
+bundle exec rake ui_guardrails:feed_ramp:modern_web:install   # runs `npx -y modern-web-guidance@latest install`
+bundle exec rake ui_guardrails:feed_ramp:rules                # the rules now mention the skill
+```
+
+- **Their installer, not a copy.** The task runs Modern Web Guidance's own interactive install in your project and nothing of it ships in this gem, so the guides are always theirs and current. It needs Node.js 22 or later. `ARGS="…"` is passed through to the installer.
+- **Your library comes first.** Once the skill is in a project skills directory (`.claude/skills`, `.agents/skills` and the like), the agent rules block tells agents to search it for platform HTML, CSS and JavaScript, and to use it where no component of yours does the job and inside the components themselves.
+- **Commit the skill** with the rules, or `CHECK=1` in CI sees rules that mention a skill the checkout doesn't have. If your team installs it per user or as an agent plugin instead, set `feed_ramp.modern_web_guidance: true` in `guardrails.yml`; `false` keeps it out of the rules.
+- **Telemetry is theirs.** The Modern Web Guidance CLI sends Google anonymous usage data: installs, the calling agent, guide IDs and the agent's search queries. The task says so before it runs. `DISABLE_TELEMETRY=1` in your shell profile opts out.
+
+Modern Web Guidance is by Google Chrome and its contributors, stewarded with the Microsoft Edge, Mozilla Firefox and MDN teams. Its code is Apache-2.0 and its guides are CC BY 4.0. Source: [GoogleChrome/modern-web-guidance](https://github.com/GoogleChrome/modern-web-guidance).
+
 ### Component match
 
 Once a manifest exists, `ui_guardrails:audit` (and so the agent hooks and the Lookbook panel) flags markup that copies one of your components instead of rendering it:
@@ -595,6 +616,13 @@ bundle exec rspec        # 453 examples
 Real-world signal lives in `examples/demo` (integration spec) and in the dogfood patches against four real codebases (Patchvault, Talos, Forem, Avo — see `CHANGELOG.md` for what each round caught).
 
 Issues and PRs: <https://github.com/meticulous/guardrails>
+
+---
+
+## Credits
+
+- [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance), by Google Chrome and its contributors with the Microsoft Edge, Mozilla Firefox and MDN teams (Apache-2.0; guides CC BY 4.0). Feed Ramp installs it with its own installer and points agents at it; none of it is bundled.
+- [Herb](https://github.com/marcoroth/herb), the ERB parser every template detector is built on.
 
 ---
 

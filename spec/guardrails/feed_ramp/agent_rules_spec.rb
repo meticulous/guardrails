@@ -64,6 +64,27 @@ RSpec.describe Guardrails::FeedRamp::AgentRules do
       expect(rules.block).to include("`check_snippet`")
     end
 
+    it "mentions Modern Web Guidance once the skill is in the project, after the app's own library" do
+      expect(rules.block).not_to include("modern-web-guidance")
+
+      write_file(".claude/skills/modern-web-guidance/SKILL.md", "---\nname: modern-web-guidance\n---\n")
+      expect(rules.block).to include("search the `modern-web-guidance` skill",
+                                     "[Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance)",
+                                     "This app's components and design tokens come first")
+    end
+
+    it "goes by the modern_web setting over what's installed" do
+      forced = described_class.new(root: @root, manifest: { "components" => [], "tokens" => [] },
+                                   manifest_path: "m.json", markdown_path: "C.md", modern_web: true)
+      expect(forced.block).to include("`modern-web-guidance` skill")
+      expect(forced.block).not_to include("come first")
+
+      write_file(".claude/skills/modern-web-guidance/SKILL.md", "---\nname: modern-web-guidance\n---\n")
+      off = described_class.new(root: @root, manifest: manifest, manifest_path: "m.json", markdown_path: "C.md",
+                                modern_web: false)
+      expect(off.block).not_to include("modern-web-guidance")
+    end
+
     it "caps the component list and says where the rest are" do
       many = manifest.merge("components" => Array.new(60) { |i| { "name" => format("C%02dComponent", i) } })
       block = rules(data: many).block
