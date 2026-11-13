@@ -610,7 +610,7 @@ Full status table and decision log: [`doc/ROADMAP.md`](doc/ROADMAP.md).
 
 ```bash
 bundle install
-bundle exec rspec        # 453 examples
+bundle exec rspec        # 883 examples
 ```
 
 Real-world signal lives in `examples/demo` (integration spec) and in the dogfood patches against four real codebases (Patchvault, Talos, Forem, Avo — see `CHANGELOG.md` for what each round caught).
