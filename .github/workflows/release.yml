@@ -21,7 +21,9 @@ on:
 # constrained by the `tags: ['v*']` filter on the trigger defined
 # above. Third-party actions are pinned to commit SHAs to reduce
 # supply-chain risk if a floating tag is moved or compromised;
-# rotate during routine maintenance.
+# rotate during routine maintenance. The exception is
+# ruby/setup-ruby, which follows `v1` so it knows new Ruby patch
+# releases as they ship.
 
 jobs:
   release:
@@ -49,7 +51,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1 branch head as of 2026-11-06
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.4.12"
           bundler-cache: true

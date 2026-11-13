@@ -16,7 +16,8 @@ concurrency:
 # Read-only: this workflow never writes to the repo or publishes. No
 # untrusted input (PR titles, bodies, branch names) is interpolated
 # into any `run:` block. Actions are pinned to the same commit SHAs as
-# release.yml; rotate both together.
+# release.yml (rotate both together), except ruby/setup-ruby, which
+# follows `v1`.
 permissions:
   contents: read
 
@@ -39,7 +40,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1 branch head as of 2026-11-06
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
